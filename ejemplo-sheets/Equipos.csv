@@ -1,0 +1,121 @@
+ID,Nombre,Categoria,LabID,Cantidad,Descripcion
+1,Osciloscopio Tektronix TBS1104C,Electrónica,3,6,Osciloscopio digital 4 canales 100MHz
+2,Osciloscopio Rigol DS1054Z,Electrónica,3,4,Osciloscopio digital 4 canales 50MHz
+3,Multímetro Fluke 117,Electrónica,,12,Multímetro digital True RMS
+4,Multímetro Fluke 87V,Electrónica,,6,Multímetro industrial de alta precisión
+5,Fuente de poder DC regulable,Electrónica,3,8,Fuente 0-30V 0-5A doble salida
+6,Fuente de poder DC triple,Electrónica,3,4,Fuente triple salida 30V/5A + 5V fija
+7,Generador de funciones,Electrónica,3,5,Generador hasta 20MHz seno/cuadrada/triangular
+8,Generador de señales RF,Electrónica,3,2,Generador RF hasta 3GHz
+9,Analizador de espectros,Electrónica,3,2,Analizador 9kHz-3GHz
+10,Protoboard grande,Electrónica,,20,Protoboard 830 puntos
+11,Protoboard pequeña,Electrónica,,30,Protoboard 400 puntos
+12,Kit de resistencias surtidas,Electrónica,,15,Kit 1/4W valores E24
+13,Kit de capacitores surtidos,Electrónica,,15,Kit cerámicos y electrolíticos
+14,Kit de LEDs surtidos,Electrónica,,15,LEDs 3mm y 5mm varios colores
+15,Kit de transistores,Electrónica,,10,BJT y MOSFET comunes
+16,Arduino Uno R3,Electrónica,,15,Placa de desarrollo con cable USB
+17,Arduino Mega 2560,Electrónica,,8,Placa de desarrollo 54 pines digitales
+18,Raspberry Pi 4 Model B,Informática,,10,SBC 4GB RAM con fuente y case
+19,ESP32 DevKit,Electrónica,,12,Módulo WiFi+BT con pines
+20,Cables jumper M-M,Electrónica,,25,Pack de 40 cables 20cm
+21,Cables jumper M-F,Electrónica,,25,Pack de 40 cables 20cm
+22,Cables jumper F-F,Electrónica,,25,Pack de 40 cables 20cm
+23,Pinza amperimétrica,Electrónica,,6,Medición AC/DC hasta 400A
+24,Soldador de estaño 60W,Electrónica,,10,Soldador tipo lápiz con soporte
+25,Estación de soldadura,Electrónica,3,5,Estación regulable con display digital
+26,Estaño 60/40 0.8mm,Electrónica,,15,Rollo 100g con flux
+27,Flux para soldar,Electrónica,,10,Pasta flux en jeringa
+28,Desoldador manual,Electrónica,,10,Bomba de succión para desoldar
+29,Lupa con luz LED,Electrónica,,8,Lupa de mesa con brazo articulado
+30,Láser He-Ne,Óptica,1,4,Láser helio-neón 632.8nm 5mW
+31,Láser diodo rojo,Óptica,,8,Láser diodo 650nm ajustable
+32,Láser diodo verde,Óptica,,6,Láser diodo 532nm
+33,Banco óptico 1m,Óptica,1,6,Riel óptico con portacomponentes
+34,Banco óptico 1.5m,Óptica,1,3,Riel óptico largo con portacomponentes
+35,Lente convergente f=100mm,Óptica,1,8,Lente biconvexa diámetro 50mm
+36,Lente convergente f=200mm,Óptica,1,8,Lente biconvexa diámetro 50mm
+37,Lente convergente f=50mm,Óptica,1,6,Lente biconvexa diámetro 50mm
+38,Lente divergente f=-100mm,Óptica,1,6,Lente bicóncava diámetro 50mm
+39,Lente divergente f=-200mm,Óptica,1,6,Lente bicóncava diámetro 50mm
+40,Espejo plano,Óptica,1,10,Espejo de primera superficie 50x50mm
+41,Espejo cóncavo R=200mm,Óptica,1,4,Espejo esférico cóncavo
+42,Espejo convexo R=200mm,Óptica,1,4,Espejo esférico convexo
+43,Prisma equilátero,Óptica,1,6,Prisma de vidrio crown 60°
+44,Red de difracción 300 líneas/mm,Óptica,1,6,Red de transmisión montada
+45,Red de difracción 600 líneas/mm,Óptica,1,4,Red de transmisión montada
+46,Polarizador lineal,Óptica,1,8,Lámina polarizadora montada
+47,Rendija simple ajustable,Óptica,1,6,Rendija con micrómetro
+48,Rendija doble (Young),Óptica,1,4,Doble rendija separación variable
+49,Pantalla blanca,Óptica,1,6,Pantalla de proyección 20x20cm
+50,Fotómetro digital,Óptica,1,4,Medidor de intensidad luminosa
+51,Espectrómetro USB,Óptica,1,3,Espectrómetro fibra óptica 350-1000nm
+52,Balanza analítica 0.1mg,Medición,2,4,Balanza de precisión con campana
+53,Balanza granataria,Medición,,8,Balanza 0.1g capacidad 2000g
+54,Termómetro digital,Medición,,15,Termómetro -50 a 300°C con sonda
+55,Termómetro infrarrojo,Medición,,6,Pistola de temperatura sin contacto
+56,Cronómetro digital,Medición,,12,Cronómetro de mano 1/100s
+57,Calibrador Vernier digital,Medición,,10,Pie de rey 0-150mm resolución 0.01mm
+58,Micrómetro 0-25mm,Medición,,8,Micrómetro exterior resolución 0.01mm
+59,Dinamómetro 10N,Medición,,10,Dinamómetro de resorte
+60,Dinamómetro 50N,Medición,,6,Dinamómetro de resorte
+61,Manómetro diferencial,Medición,,4,Tubo en U con escala
+62,Barómetro digital,Medición,,3,Medidor de presión atmosférica
+63,Sonómetro digital,Medición,,4,Medidor de nivel sonoro dBA/dBC
+64,Luxómetro digital,Medición,,6,Medidor de iluminación 0-200000 lux
+65,pH-metro digital,Química,2,6,Medidor de pH con electrodo
+66,Conductímetro,Química,2,4,Medidor de conductividad
+67,Agitador magnético con calentamiento,Química,2,8,Plancha agitadora hasta 300°C
+68,Agitador magnético simple,Química,,6,Agitador sin calentamiento
+69,Barras magnéticas surtidas,Química,,20,Set de barras para agitador
+70,Mechero Bunsen,Química,2,10,Mechero de gas con regulador
+71,Baño María digital,Química,2,3,Baño termostático hasta 100°C
+72,Centrífuga de mesa,Química,2,2,Centrífuga 4000 RPM 8 tubos
+73,Manta de calentamiento 500mL,Química,2,4,Para balones de fondo redondo
+74,Pipeta automática 1-10mL,Química,2,8,Micropipeta de volumen variable
+75,Pipeta automática 0.1-1mL,Química,2,8,Micropipeta de volumen variable
+76,Pipeta automática 10-100µL,Química,2,6,Micropipeta de volumen variable
+77,Bureta 50mL,Química,2,10,Bureta de vidrio con llave de teflón
+78,Matraz Erlenmeyer 250mL,Química,,20,Vidrio borosilicato
+79,Matraz Erlenmeyer 500mL,Química,,15,Vidrio borosilicato
+80,Matraz aforado 100mL,Química,,12,Vidrio clase A
+81,Matraz aforado 250mL,Química,,10,Vidrio clase A
+82,Vaso de precipitados 250mL,Química,,20,Vidrio borosilicato
+83,Vaso de precipitados 500mL,Química,,15,Vidrio borosilicato
+84,Vaso de precipitados 1000mL,Química,,10,Vidrio borosilicato
+85,Probeta 100mL,Química,,12,Vidrio con base plástica
+86,Probeta 250mL,Química,,10,Vidrio con base plástica
+87,Embudo de separación 250mL,Química,,8,Vidrio con llave de teflón
+88,Soporte universal con pinzas,Química,,15,Soporte + pinza + nuez
+89,Desecador de vidrio,Química,2,4,Desecador con placa porcelana
+90,Computadora de escritorio,Informática,4,40,PC con monitor teclado y mouse
+91,Laptop Dell Latitude,Informática,,10,Laptop i5 8GB RAM para préstamo
+92,Monitor externo 24 pulgadas,Informática,,8,Monitor HDMI/DP para segundo display
+93,Proyector Epson,Informática,,5,Proyector 3600 lúmenes HDMI
+94,Cable HDMI 3m,Informática,,15,Cable HDMI 2.0
+95,Cable ethernet 3m,Informática,,20,Cable UTP Cat6
+96,Hub USB 4 puertos,Informática,,10,Hub USB 3.0
+97,Torno de banco,Mecánica,5,3,Torno manual para piezas pequeñas
+98,Taladro de banco,Mecánica,5,3,Taladro de columna velocidad variable
+99,Caliper de altura,Mecánica,5,2,Medidor de altura digital 0-300mm
+100,Juego de llaves Allen,Mecánica,,10,Set métrico 1.5-10mm
+101,Juego de destornilladores,Mecánica,,10,Set Phillips y planos
+102,Prensa de banco,Mecánica,5,4,Prensa mordaza 100mm
+103,Sierra caladora,Mecánica,5,2,Sierra eléctrica de mesa
+104,Esmeriladora de banco,Mecánica,5,2,Esmeril doble piedra
+105,Flexómetro 5m,Mecánica,,10,Cinta métrica retráctil
+106,Nivel de burbuja,Mecánica,,6,Nivel 30cm aluminio
+107,Sensor de temperatura LM35,Electrónica,,15,Sensor analógico para Arduino
+108,Sensor ultrasónico HC-SR04,Electrónica,,12,Sensor de distancia para Arduino
+109,Sensor PIR,Electrónica,,10,Sensor de movimiento infrarrojo
+110,Módulo relay 4 canales,Electrónica,,8,Módulo relay 5V para Arduino
+111,Display LCD 16x2,Electrónica,,10,Display con módulo I2C
+112,Motor DC con reductor,Mecánica,,8,Motor 12V con caja reductora
+113,Servomotor SG90,Electrónica,,15,Micro servo 180° para Arduino
+114,Motor paso a paso NEMA 17,Mecánica,,6,Motor paso a paso con driver A4988
+115,Gafas de seguridad,Seguridad,,30,Gafas protectoras transparentes
+116,Guantes de látex (caja),Seguridad,,20,Caja de 100 guantes talla M
+117,Bata de laboratorio,Seguridad,,25,Bata blanca talla estándar
+118,Extintor portátil,Seguridad,,5,Extintor CO2 para laboratorio
+119,Kit de primeros auxilios,Seguridad,,5,Botiquín básico
+120,Cámara termográfica,Medición,,2,Cámara IR resolución 160x120

@@ -1,0 +1,228 @@
+/* ============================================
+   Estilos - Sistema de Reserva de Laboratorios
+   ============================================ */
+
+:root {
+  --color-free: #d4edda;
+  --color-free-hover: #b8dfc5;
+  --color-occupied: #f8d7da;
+  --color-mine: #fff3cd;
+}
+
+body {
+  background-color: #f5f6fa;
+}
+
+.navbar-brand {
+  font-weight: 700;
+}
+
+/* Grilla del calendario */
+.calendar-table {
+  table-layout: fixed;
+}
+
+.calendar-table th {
+  font-size: 0.85rem;
+  vertical-align: middle;
+  background-color: #f8f9fa;
+}
+
+.lab-header {
+  min-width: 160px;
+  width: 180px;
+}
+
+.calendar-cell {
+  height: 60px;
+  vertical-align: middle;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  font-size: 0.8rem;
+}
+
+.cell-free {
+  background-color: var(--color-free);
+}
+
+.cell-free:hover {
+  background-color: var(--color-free-hover);
+}
+
+.cell-occupied {
+  background-color: var(--color-occupied);
+  cursor: default;
+}
+
+.cell-mine {
+  background-color: var(--color-mine);
+  cursor: pointer;
+}
+
+.cell-mine:hover {
+  background-color: #ffe69c;
+  box-shadow: inset 0 0 0 2px #ffc107;
+}
+
+/* Navegación de fecha */
+.date-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-nav h5 {
+  margin: 0;
+  min-width: 280px;
+  text-align: center;
+}
+
+/* Modal de reserva */
+#reservationModal .modal-dialog {
+  max-width: 650px;
+}
+
+/* Lista de equipos */
+.equip-qty {
+  text-align: center;
+}
+
+.list-group-item {
+  transition: background-color 0.1s;
+}
+
+/* Toast */
+#toast-container {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 1100;
+}
+
+/* Vista mis reservas */
+#my-email-display {
+  font-weight: 600;
+}
+
+/* ============================================
+   Vista Mensual
+   ============================================ */
+
+.month-table {
+  table-layout: fixed;
+}
+
+.month-cell {
+  vertical-align: top;
+  height: 110px;
+  padding: 4px 6px !important;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.month-cell:hover {
+  background-color: #e9ecef;
+}
+
+.month-cell-empty {
+  background-color: #f8f9fa;
+  cursor: default;
+}
+
+.month-cell-empty:hover {
+  background-color: #f8f9fa;
+}
+
+.month-cell-today {
+  border: 2px solid #0d6efd !important;
+  background-color: #e7f1ff;
+}
+
+.month-day-number {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 2px;
+}
+
+.month-day-content {
+  font-size: 0.7rem;
+}
+
+.month-lab-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.month-lab-name {
+  flex-shrink: 0;
+  width: 55px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65rem;
+}
+
+.month-progress {
+  flex-grow: 1;
+  height: 6px !important;
+  border-radius: 3px;
+}
+
+/* Celda seleccionada */
+.cell-selected {
+  background-color: #a8d8ff !important;
+  border: 2px solid #0d6efd !important;
+  box-shadow: inset 0 0 0 1px #0d6efd;
+}
+
+.cell-selected:hover {
+  background-color: #8ec8f6 !important;
+}
+
+/* Barra de selección flotante */
+.selection-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1050;
+  background: #e7f1ff;
+  border: 1px solid #b6d4fe;
+  border-radius: 6px;
+  padding: 8px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .calendar-cell {
+    height: 50px;
+    font-size: 0.7rem;
+  }
+
+  .lab-header {
+    min-width: 100px;
+    width: 120px;
+    font-size: 0.8rem;
+  }
+
+  .date-nav h5 {
+    font-size: 0.95rem;
+    min-width: auto;
+  }
+
+  .month-cell {
+    height: 80px;
+    padding: 2px 3px !important;
+  }
+
+  .month-lab-name {
+    display: none;
+  }
+
+  .month-day-number {
+    font-size: 0.8rem;
+  }
+}

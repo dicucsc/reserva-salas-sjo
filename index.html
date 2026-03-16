@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Gestión de Labs de SJO</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Pantalla de Login -->
+  <div id="login-screen" class="d-flex align-items-center justify-content-center" style="min-height:100vh">
+    <div class="card shadow" style="width:400px; max-width:95%">
+      <div class="card-body p-4">
+        <h4 class="card-title text-center mb-1">Sistema de Gestión de Labs de SJO</h4>
+        <p class="text-muted text-center mb-4">Ingresa con tu correo institucional</p>
+        <div class="mb-3">
+          <label class="form-label">Correo electrónico</label>
+          <input type="email" class="form-control" id="login-email" placeholder="tu@institucion.edu" autofocus>
+        </div>
+        <div id="login-error" class="alert alert-danger py-2 d-none"></div>
+        <button id="btn-login" class="btn btn-primary w-100">Ingresar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Principal (oculta hasta login) -->
+  <div id="app-container" class="d-none">
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="#">Gestión de Labs SJO</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link active" href="#" data-nav="calendario">Calendario</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-nav="mis-reservas">Mis Reservas</a>
+            </li>
+          </ul>
+          <div class="d-flex align-items-center gap-2">
+            <span class="navbar-text" id="user-display"></span>
+            <button id="btn-logout" class="btn btn-outline-light btn-sm">Salir</button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid mt-3">
+      <!-- Vista Calendario -->
+      <section id="view-calendario" class="view-section">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <div class="date-nav">
+            <button id="btn-prev" class="btn btn-outline-secondary btn-sm">&larr;</button>
+            <button id="btn-today" class="btn btn-outline-primary btn-sm">Hoy</button>
+            <button id="btn-next" class="btn btn-outline-secondary btn-sm">&rarr;</button>
+            <input type="date" id="date-picker" class="form-control form-control-sm" style="width:160px">
+            <h5 id="current-date" class="mb-0">Cargando...</h5>
+          </div>
+          <div class="btn-group btn-group-sm">
+            <button id="btn-view-day" class="btn btn-outline-primary btn-view-mode active">Día</button>
+            <button id="btn-view-week" class="btn btn-outline-primary btn-view-mode">Semana</button>
+            <button id="btn-view-month" class="btn btn-outline-primary btn-view-mode">Mes</button>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3 mb-2 flex-wrap">
+          <small><span style="display:inline-block;width:14px;height:14px;background:var(--color-free);border:1px solid #ccc;vertical-align:middle"></span> Libre</small>
+          <small><span style="display:inline-block;width:14px;height:14px;background:var(--color-occupied);border:1px solid #ccc;vertical-align:middle"></span> Ocupado</small>
+          <small><span style="display:inline-block;width:14px;height:14px;background:var(--color-mine);border:1px solid #ccc;vertical-align:middle"></span> Mi reserva</small>
+          <small class="text-muted">| Click = seleccionar, Shift+click = rango</small>
+        </div>
+
+        <!-- Barra de selección flotante -->
+        <div id="selection-bar" class="selection-bar d-none">
+          <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+            <span id="sel-info"></span>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="Calendar.clearSelection()">Limpiar</button>
+              <button class="btn btn-sm btn-success" onclick="Calendar.openSelectionReservation()">Reservar bloques seleccionados</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="calendar-grid">
+          <div class="text-center py-5">
+            <div class="spinner-border" role="status"></div>
+            <p class="mt-2">Cargando datos...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Vista Mis Reservas -->
+      <section id="view-mis-reservas" class="view-section d-none">
+        <h4 class="mb-3">Mis Reservas <small class="text-muted" id="my-email-display"></small></h4>
+        <div id="my-reservations-list"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Modal de Reserva -->
+  <div class="modal fade" id="reservationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Nueva Reserva</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-light mb-3">
+            <strong>Lab:</strong> <span id="res-lab-info"></span> &nbsp;|&nbsp;
+            <strong>Fecha:</strong> <span id="res-fecha-info"></span> &nbsp;|&nbsp;
+            <strong>Bloque:</strong> <span id="res-bloque-info"></span>
+            <br>
+            <strong>Usuario:</strong> <span id="res-user-info"></span>
+          </div>
+
+          <!-- Paso 1: Actividad -->
+          <div id="res-step-1">
+            <div class="mb-3">
+              <label class="form-label">Actividad / Motivo</label>
+              <input type="text" class="form-control" id="res-actividad" placeholder="Ej: Práctica de óptica, Clase de circuitos...">
+            </div>
+          </div>
+
+          <!-- Paso 2: Equipos -->
+          <div id="res-step-2" class="d-none">
+            <h6 class="mb-2">Seleccionar equipos (opcional)</h6>
+            <div class="row g-2 mb-3">
+              <div class="col-7">
+                <input type="text" class="form-control form-control-sm" id="equip-search" placeholder="Buscar equipo...">
+              </div>
+              <div class="col-5">
+                <select class="form-select form-select-sm" id="equip-category">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+            </div>
+            <div id="equipment-list" style="max-height: 350px; overflow-y: auto;"></div>
+            <hr>
+            <div id="equip-summary" class="small">
+              <p class="text-muted mb-0">No se han seleccionado equipos</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button id="btn-res-back" class="btn btn-outline-secondary d-none" onclick="App.showReservationStep(1)">
+            &larr; Volver
+          </button>
+          <button id="btn-res-next" class="btn btn-primary" onclick="App.goToStep2()">
+            Siguiente: Equipos &rarr;
+          </button>
+          <button id="btn-res-confirm" class="btn btn-success d-none" onclick="App.confirmReservation()">
+            Confirmar Reserva
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Cancelar Reserva -->
+  <div class="modal fade" id="cancelModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-warning-subtle">
+          <h5 class="modal-title">Cancelar Reserva</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="cancel-modal-body"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Volver</button>
+          <button id="btn-cancel-confirm" class="btn btn-danger" onclick="App.confirmCancel()">
+            Confirmar Cancelación
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/equipment.js"></script>
+  <script src="js/calendar.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
