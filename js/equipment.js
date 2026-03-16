@@ -9,7 +9,7 @@ const Equipment = {
   categories: [],
 
   async loadCatalog() {
-    // Catálogo ya se carga desde Api.init() en Calendar.init()
+    // Catálogo ya se carga desde Api.fullInit() en Calendar.init()
     // Este método queda por compatibilidad
     if (this.allEquipment.length > 0) return;
     const res = await Api.getEquipment();
@@ -24,6 +24,38 @@ const Equipment = {
     if (res.ok) {
       this.availability = res.data;
     }
+  },
+
+  // Calcular disponibilidad client-side usando datos ya cacheados
+  computeAvailability(labId, fecha, bloqueId) {
+    // Filtrar equipos relevantes (del lab o generales)
+    const relevant = this.allEquipment.filter(eq =>
+      String(eq.LabID) === '' || String(eq.LabID) === String(labId)
+    );
+
+    // Encontrar reservas del mismo bloque+fecha
+    const blockReservations = Calendar.allReservations.filter(r =>
+      r.Fecha === fecha && String(r.BloqueID) === String(bloqueId)
+    );
+
+    // Calcular disponibilidad
+    this.availability = relevant.map(eq => {
+      let reservados = 0;
+      blockReservations.forEach(r => {
+        if (r.equipos) {
+          r.equipos.forEach(re => {
+            if (String(re.EquipoID) === String(eq.ID))
+              reservados += Number(re.Cantidad);
+          });
+        }
+      });
+      return {
+        ...eq,
+        CantidadTotal: Number(eq.Cantidad),
+        Reservados: reservados,
+        Disponible: Number(eq.Cantidad) - reservados
+      };
+    });
   },
 
   getFiltered(searchText, category) {

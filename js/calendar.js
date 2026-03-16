@@ -6,12 +6,15 @@ const Calendar = {
   currentDate: new Date(),
   labs: [],
   blocks: [],
-  reservations: [],
+  reservations: [],    // reservas filtradas para la vista actual
+  allReservations: [], // cache de todas las reservas del mes cargado
+  loadedMonth: null,   // 'YYYY-MM' del mes actualmente en cache
   viewMode: 'day', // 'day', 'week', 'month'
+  refreshInterval: null,
 
-  // Selección múltiple de celdas
+  // Selección múltiple de celdas (acumulativa, tipo Excel)
   selection: [], // [{ labId, labName, fecha, bloqueId, bloqueLabel }]
-  lastClickedIndex: -1, // índice del bloque para shift+click
+  lastClicked: null, // { labId, fecha, blockIndex } para shift+click
 
   formatDate(d) {
     const y = d.getFullYear();
@@ -40,15 +43,38 @@ const Calendar = {
   },
 
   async init() {
-    const res = await Api.init();
+    // fullInit: labs + blocks + equipment + reservations del mes en 1 sola llamada
+    const fecha = this.formatDate(this.currentDate);
+    const res = await Api.fullInit(fecha);
     if (res.ok) {
       this.labs = res.data.labs;
       this.blocks = res.data.blocks;
       Equipment.allEquipment = res.data.equipment;
       Equipment.categories = [...new Set(res.data.equipment.map(e => e.Categoria).filter(Boolean))].sort();
+      this.allReservations = res.data.reservations;
+      this.loadedMonth = this.getMonthKey(this.currentDate);
     }
     this.setupNavigation();
-    await this.loadAndRender();
+    this.filterReservationsForView();
+
+    const dateStr = this.formatDate(this.currentDate);
+    if (this.viewMode === 'day') {
+      document.getElementById('current-date').textContent = this.formatDisplayDate(this.currentDate);
+      this.renderDayGrid();
+    } else if (this.viewMode === 'week') {
+      const monday = this.getMonday(this.currentDate);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      document.getElementById('current-date').textContent =
+        `${this.formatDisplayDate(monday)} — ${this.formatDisplayDate(sunday)}`;
+      this.renderWeekGrid();
+    } else {
+      document.getElementById('current-date').textContent = this.formatMonthYear(this.currentDate);
+      this.renderMonthGrid();
+    }
+    this.updateSelectionUI();
+
+    this.startAutoRefresh();
   },
 
   setupNavigation() {
@@ -79,7 +105,6 @@ const Calendar = {
     this.viewMode = mode;
     document.querySelectorAll('.btn-view-mode').forEach(btn => btn.classList.remove('active'));
     document.getElementById('btn-view-' + mode).classList.add('active');
-    this.clearSelection();
     this.loadAndRender();
   },
 
@@ -92,15 +117,38 @@ const Calendar = {
       this.currentDate.setMonth(this.currentDate.getMonth() + dir);
     }
     document.getElementById('date-picker').value = this.formatDate(this.currentDate);
-    this.clearSelection();
     this.loadAndRender();
+  },
+
+  // --- Auto-refresh ---
+
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+    this.refreshInterval = setInterval(async () => {
+      this.invalidateCache();
+      await this.ensureMonthLoaded();
+      this.filterReservationsForView();
+      this.renderCurrentView();
+    }, 90000); // cada 90 segundos
+  },
+
+  stopAutoRefresh() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
+    }
   },
 
   // --- Selección múltiple ---
 
+  invalidateCache() {
+    this.loadedMonth = null;
+    this.allReservations = [];
+  },
+
   clearSelection() {
     this.selection = [];
-    this.lastClickedIndex = -1;
+    this.lastClicked = null;
     this.updateSelectionBar();
   },
 
@@ -113,48 +161,34 @@ const Calendar = {
   toggleCell(labId, labName, fecha, bloqueId, bloqueLabel, blockIndex, event) {
     const isShift = event && event.shiftKey;
 
-    if (isShift && this.selection.length > 0) {
+    if (isShift && this.lastClicked && this.lastClicked.labId === labId && this.lastClicked.fecha === fecha) {
       // Shift+click: seleccionar rango en mismo lab+fecha
-      const lastSel = this.selection[this.selection.length - 1];
-      if (lastSel.labId === labId && lastSel.fecha === fecha && this.lastClickedIndex >= 0) {
-        const from = Math.min(this.lastClickedIndex, blockIndex);
-        const to = Math.max(this.lastClickedIndex, blockIndex);
-        for (let i = from; i <= to; i++) {
-          const block = this.blocks[i];
-          if (!block) continue;
-          const bId = String(block.ID);
-          // Solo agregar si está libre y no está ya seleccionado
-          const isOccupied = this.reservations.some(r =>
-            String(r.LabID) === labId && String(r.BloqueID) === bId &&
-            (this.viewMode === 'day' || r.Fecha === fecha)
-          );
-          if (!isOccupied && !this.isSelected(labId, fecha, bId)) {
-            this.selection.push({ labId, labName, fecha, bloqueId: bId, bloqueLabel: block.Etiqueta });
-          }
+      const from = Math.min(this.lastClicked.blockIndex, blockIndex);
+      const to = Math.max(this.lastClicked.blockIndex, blockIndex);
+      for (let i = from; i <= to; i++) {
+        const block = this.blocks[i];
+        if (!block) continue;
+        const bId = String(block.ID);
+        const isOccupied = this.allReservations.some(r =>
+          String(r.LabID) === labId && String(r.BloqueID) === bId && r.Fecha === fecha
+        );
+        if (!isOccupied && !this.isSelected(labId, fecha, bId)) {
+          this.selection.push({ labId, labName, fecha, bloqueId: bId, bloqueLabel: block.Etiqueta });
         }
       }
     } else {
-      // Click normal: toggle individual
+      // Click normal: toggle individual (acumulativo)
       const idx = this.selection.findIndex(s =>
         s.labId === labId && s.fecha === fecha && s.bloqueId === bloqueId
       );
-
       if (idx >= 0) {
-        // Deseleccionar
         this.selection.splice(idx, 1);
       } else {
-        // Si es otro lab o fecha, limpiar selección anterior
-        if (this.selection.length > 0) {
-          const first = this.selection[0];
-          if (first.labId !== labId || first.fecha !== fecha) {
-            this.selection = [];
-          }
-        }
         this.selection.push({ labId, labName, fecha, bloqueId, bloqueLabel });
       }
     }
 
-    this.lastClickedIndex = blockIndex;
+    this.lastClicked = { labId, fecha, blockIndex };
     this.updateSelectionUI();
     this.updateSelectionBar();
   },
@@ -177,54 +211,172 @@ const Calendar = {
     }
 
     bar.classList.remove('d-none');
-    const labName = this.selection[0].labName;
-    const fecha = this.selection[0].fecha;
-    const bloques = this.selection
-      .sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId))
-      .map(s => s.bloqueLabel)
-      .join(', ');
+
+    // Agrupar selección por lab+fecha
+    const groups = {};
+    this.selection.forEach(s => {
+      const key = `${s.labId}|${s.fecha}`;
+      if (!groups[key]) groups[key] = { labName: s.labName, fecha: s.fecha, bloques: [] };
+      groups[key].bloques.push(s);
+    });
+
+    const lines = Object.values(groups).map(g => {
+      const bloques = g.bloques
+        .sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId))
+        .map(s => s.bloqueLabel)
+        .join(', ');
+      return `<strong>${g.labName}</strong> — ${g.fecha} — ${g.bloques.length} bloque(s): ${bloques}`;
+    });
 
     document.getElementById('sel-info').innerHTML =
-      `<strong>${labName}</strong> — ${fecha} — ${this.selection.length} bloque(s): ${bloques}`;
+      `${this.selection.length} bloque(s) seleccionado(s):<br>` + lines.join('<br>');
   },
 
-  openSelectionReservation() {
+  async openSelectionReservation() {
     if (this.selection.length === 0) return;
-    App.openMultiReservation(this.selection);
+
+    const btn = document.querySelector('#selection-bar .btn-success');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Verificando disponibilidad...';
+    }
+
+    try {
+      // Refrescar datos del mes (force reload)
+      this.invalidateCache();
+      await this.ensureMonthLoaded();
+      this.filterReservationsForView();
+
+      // Verificar cuáles bloques siguen libres
+      const conflicts = [];
+      const valid = this.selection.filter(s => {
+        const occupied = this.allReservations.some(r =>
+          String(r.LabID) === s.labId && r.Fecha === s.fecha && String(r.BloqueID) === s.bloqueId
+        );
+        if (occupied) conflicts.push(s);
+        return !occupied;
+      });
+
+      if (conflicts.length > 0) {
+        this.selection = valid;
+        this.updateSelectionUI();
+        this.updateSelectionBar();
+        // Re-render grid con datos frescos
+        this.renderCurrentView();
+        App.showToast(`${conflicts.length} bloque(s) ya fueron reservados por otro usuario`, 'warning');
+      }
+
+      if (valid.length > 0) {
+        App.openMultiReservation(valid);
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Reservar bloques seleccionados';
+      }
+    }
+  },
+
+  // --- Render helpers ---
+
+  renderCurrentView() {
+    if (this.viewMode === 'day') this.renderDayGrid();
+    else if (this.viewMode === 'week') this.renderWeekGrid();
+    else this.renderMonthGrid();
+    this.updateSelectionUI();
   },
 
   // --- Render ---
 
-  async loadAndRender() {
+  getMonthKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  },
+
+  // Determina qué meses necesita la vista actual
+  getRequiredMonths() {
+    const months = new Set();
+    months.add(this.getMonthKey(this.currentDate));
+
+    if (this.viewMode === 'week') {
+      // La semana puede cruzar meses
+      const monday = this.getMonday(this.currentDate);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      months.add(this.getMonthKey(monday));
+      months.add(this.getMonthKey(sunday));
+    }
+    return months;
+  },
+
+  async ensureMonthLoaded() {
+    const required = this.getRequiredMonths();
+    const missing = [...required].filter(m => m !== this.loadedMonth);
+
+    if (missing.length === 0) return; // ya está en cache
+
+    // Cargar el mes principal (si la semana cruza meses, cargamos el del currentDate)
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '<div class="text-center py-5"><div class="spinner-border" role="status"></div></div>';
+
+    const dateStr = this.formatDate(this.currentDate);
+    const res = await Api.getMonth(dateStr);
+    if (res.ok) {
+      this.allReservations = res.data;
+      this.loadedMonth = this.getMonthKey(this.currentDate);
+    }
+
+    // Si la semana cruza al mes anterior/siguiente, cargar también
+    for (const m of required) {
+      if (m !== this.loadedMonth) {
+        const [y, mo] = m.split('-');
+        const extraRes = await Api.getMonth(`${y}-${mo}-01`);
+        if (extraRes.ok) {
+          this.allReservations = this.allReservations.concat(extraRes.data);
+        }
+      }
+    }
+  },
+
+  filterReservationsForView() {
+    const dateStr = this.formatDate(this.currentDate);
+
+    if (this.viewMode === 'day') {
+      this.reservations = this.allReservations.filter(r => r.Fecha === dateStr);
+    } else if (this.viewMode === 'week') {
+      const monday = this.getMonday(this.currentDate);
+      const dates = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        dates.push(this.formatDate(d));
+      }
+      this.reservations = this.allReservations.filter(r => dates.includes(r.Fecha));
+    } else {
+      this.reservations = this.allReservations;
+    }
+  },
+
+  async loadAndRender() {
+    await this.ensureMonthLoaded();
+    this.filterReservationsForView();
 
     const dateStr = this.formatDate(this.currentDate);
 
     if (this.viewMode === 'day') {
       document.getElementById('current-date').textContent = this.formatDisplayDate(this.currentDate);
-      const res = await Api.getReservations(dateStr);
-      if (res.ok) this.reservations = res.data;
       this.renderDayGrid();
-
     } else if (this.viewMode === 'week') {
       const monday = this.getMonday(this.currentDate);
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
       document.getElementById('current-date').textContent =
         `${this.formatDisplayDate(monday)} — ${this.formatDisplayDate(sunday)}`;
-      const res = await Api.getWeek(dateStr);
-      if (res.ok) this.reservations = res.data;
       this.renderWeekGrid();
-
     } else {
       document.getElementById('current-date').textContent = this.formatMonthYear(this.currentDate);
-      const res = await Api.getMonth(dateStr);
-      if (res.ok) this.reservations = res.data;
       this.renderMonthGrid();
     }
 
-    // Re-apply selection UI after render
     this.updateSelectionUI();
   },
 
@@ -477,7 +629,6 @@ const Calendar = {
   goToDay(dateStr) {
     this.currentDate = new Date(dateStr + 'T12:00:00');
     document.getElementById('date-picker').value = dateStr;
-    this.clearSelection();
     this.setViewMode('day');
   }
 };

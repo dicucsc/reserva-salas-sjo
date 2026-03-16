@@ -21,6 +21,10 @@ const Api = {
     return res.json();
   },
 
+  fullInit(fecha) {
+    return this.get({ action: 'fullInit', fecha });
+  },
+
   init() {
     return this.get({ action: 'init' });
   },

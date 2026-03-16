@@ -69,6 +69,7 @@ const App = {
 
   logout() {
     this.currentUser = null;
+    Calendar.stopAutoRefresh();
     localStorage.removeItem('userEmail');
     localStorage.removeItem('userName');
     document.getElementById('login-screen').classList.remove('d-none');
@@ -107,19 +108,35 @@ const App = {
   openMultiReservation(selection) {
     if (!this.currentUser || selection.length === 0) return;
 
-    const sorted = [...selection].sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId));
-    const labId = sorted[0].labId;
-    const labName = sorted[0].labName;
-    const fecha = sorted[0].fecha;
-    const bloques = sorted.map(s => ({ bloqueId: s.bloqueId, bloqueLabel: s.bloqueLabel }));
+    // Agrupar por lab+fecha
+    const groups = {};
+    selection.forEach(s => {
+      const key = `${s.labId}|${s.fecha}`;
+      if (!groups[key]) groups[key] = { labId: s.labId, labName: s.labName, fecha: s.fecha, bloques: [] };
+      groups[key].bloques.push({ bloqueId: s.bloqueId, bloqueLabel: s.bloqueLabel });
+    });
 
-    this.currentReservation = { labId, labName, fecha, bloques };
+    const groupList = Object.values(groups);
+    groupList.forEach(g => g.bloques.sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId)));
+
+    // Guardar todos los grupos para confirmación
+    this.currentReservationGroups = groupList;
+
+    // Para compatibilidad, el primer grupo se usa como referencia de equipos
+    const first = groupList[0];
+    this.currentReservation = { labId: first.labId, labName: first.labName, fecha: first.fecha, bloques: first.bloques };
     Equipment.reset();
 
-    document.getElementById('res-lab-info').textContent = labName;
-    document.getElementById('res-fecha-info').textContent = fecha;
-    document.getElementById('res-bloque-info').textContent =
-      bloques.map(b => b.bloqueLabel).join(' + ');
+    // Mostrar resumen de todas las reservas
+    const summaryLines = groupList.map(g =>
+      `<strong>${g.labName}</strong> — ${g.fecha}: ${g.bloques.map(b => b.bloqueLabel).join(' + ')}`
+    );
+    document.getElementById('res-lab-info').textContent = groupList.length === 1 ? first.labName : `${groupList.length} laboratorios`;
+    document.getElementById('res-fecha-info').textContent = groupList.length === 1 ? first.fecha : 'Múltiples fechas';
+    document.getElementById('res-bloque-info').innerHTML =
+      groupList.length === 1
+        ? first.bloques.map(b => b.bloqueLabel).join(' + ')
+        : '<br>' + summaryLines.join('<br>');
     document.getElementById('res-user-info').textContent =
       `${this.currentUser.Nombre} (${this.currentUser.Email})`;
     document.getElementById('res-actividad').value = '';
@@ -137,7 +154,7 @@ const App = {
     document.getElementById('btn-res-confirm').classList.toggle('d-none', step !== 2);
   },
 
-  async goToStep2() {
+  goToStep2() {
     const actividad = document.getElementById('res-actividad').value.trim();
     if (!actividad) {
       alert('Indica la actividad o motivo de la reserva');
@@ -145,12 +162,10 @@ const App = {
     }
 
     const { labId, fecha, bloques } = this.currentReservation;
-    document.getElementById('equipment-list').innerHTML =
-      '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Cargando equipos...</div>';
     this.showReservationStep(2);
 
-    // Cargar disponibilidad del primer bloque (referencia)
-    await Equipment.loadAvailability(labId, fecha, bloques[0].bloqueId);
+    // Calcular disponibilidad client-side (sin HTTP call)
+    Equipment.computeAvailability(labId, fecha, bloques[0].bloqueId);
     Equipment.renderCategoryFilter('equip-category');
     Equipment.renderSelector('equipment-list');
 
@@ -166,36 +181,52 @@ const App = {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Confirmando...';
 
     const actividad = document.getElementById('res-actividad').value.trim();
-    const { labId, fecha, bloques } = this.currentReservation;
     const equipos = Equipment.getSelectedList().map(e => ({
       equipoId: e.equipoId,
       cantidad: e.cantidad
     }));
 
-    try {
-      const bloqueIds = bloques.map(b => b.bloqueId);
-      const res = await Api.createReservation({
-        labId, fecha,
-        bloqueIds, // array de bloques
-        email: this.currentUser.Email,
-        nombre: this.currentUser.Nombre,
-        actividad, equipos
-      });
+    const groups = this.currentReservationGroups || [this.currentReservation];
+    let totalCreated = 0;
+    let lastError = null;
 
-      if (res.ok) {
-        bootstrap.Modal.getInstance(document.getElementById('reservationModal')).hide();
-        const n = bloqueIds.length;
-        this.showToast(`${n} reserva(s) creada(s) exitosamente`, 'success');
-        Calendar.clearSelection();
-        await Calendar.loadAndRender();
-      } else {
-        alert('Error: ' + res.error);
+    try {
+      for (const group of groups) {
+        const bloqueIds = group.bloques.map(b => b.bloqueId);
+        const res = await Api.createReservation({
+          labId: group.labId,
+          fecha: group.fecha,
+          bloqueIds,
+          email: this.currentUser.Email,
+          nombre: this.currentUser.Nombre,
+          actividad, equipos
+        });
+
+        if (res.ok) {
+          totalCreated += bloqueIds.length;
+        } else {
+          lastError = res.error;
+        }
       }
+
+      bootstrap.Modal.getInstance(document.getElementById('reservationModal')).hide();
+
+      if (totalCreated > 0) {
+        this.showToast(`${totalCreated} reserva(s) creada(s) exitosamente`, 'success');
+      }
+      if (lastError) {
+        alert('Algunas reservas fallaron: ' + lastError);
+      }
+
+      Calendar.clearSelection();
+      Calendar.invalidateCache();
+      await Calendar.loadAndRender();
     } catch (err) {
       alert('Error de conexión: ' + err.message);
     } finally {
       btn.disabled = false;
       btn.innerHTML = 'Confirmar Reserva';
+      this.currentReservationGroups = null;
     }
   },
 
@@ -211,13 +242,13 @@ const App = {
     container.innerHTML = '<div class="text-center py-3"><div class="spinner-border"></div></div>';
 
     try {
-      const res = await Api.getMonth(Calendar.formatDate(new Date()));
-      if (!res.ok) {
-        container.innerHTML = '<div class="alert alert-danger">Error al cargar reservas</div>';
-        return;
+      // Usar datos del cache del calendario en vez de hacer otra llamada API
+      if (!Calendar.loadedMonth) {
+        await Calendar.ensureMonthLoaded();
       }
+      const allData = Calendar.allReservations;
 
-      const myReservations = res.data.filter(r =>
+      const myReservations = allData.filter(r =>
         String(r.Email).trim().toLowerCase() === email.trim().toLowerCase()
       );
       this.myReservationsCache = myReservations;
@@ -316,6 +347,7 @@ const App = {
       if (res.ok) {
         bootstrap.Modal.getInstance(document.getElementById('cancelModal')).hide();
         this.showToast('Reserva cancelada', 'success');
+        Calendar.invalidateCache();
         await Calendar.loadAndRender();
         // Refrescar "Mis Reservas" si está visible
         if (!document.getElementById('view-mis-reservas').classList.contains('d-none')) {
@@ -345,6 +377,7 @@ const App = {
         const res = await Api.cancelReservation(reservaId, this.currentUser.Email);
         if (res.ok) {
           this.showToast('Reserva cancelada', 'success');
+          Calendar.invalidateCache();
           this.loadMyReservations();
           Calendar.loadAndRender();
         } else { alert('Error: ' + res.error); }

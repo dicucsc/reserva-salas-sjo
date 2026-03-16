@@ -32,11 +32,28 @@ function jsonResponse(data) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// --- Cache helpers ---
+
+function getCached(key, ttlSeconds, fetchFn) {
+  const cache = CacheService.getScriptCache();
+  const raw = cache.get(key);
+  if (raw !== null) return JSON.parse(raw);
+  const data = fetchFn();
+  const json = JSON.stringify(data);
+  if (json.length < 100000) cache.put(key, json, ttlSeconds);
+  return data;
+}
+
+function invalidateCache() {
+  const cache = CacheService.getScriptCache();
+  cache.removeAll(['data_labs', 'data_blocks', 'data_equipment', 'data_users', 'data_res_equip']);
+}
+
 // --- Validación de usuario ---
 
 function validateUser(email) {
   if (!email) return null;
-  const users = sheetToObjects(getSheet(SHEET_USERS));
+  const users = getCached('data_users', 300, () => sheetToObjects(getSheet(SHEET_USERS)));
   const normalized = email.trim().toLowerCase();
   return users.find(u => String(u.Email).trim().toLowerCase() === normalized) || null;
 }
@@ -46,10 +63,19 @@ function doGet(e) {
 
   try {
     switch (action) {
+      case 'fullInit': {
+        const fecha = e.parameter.fecha;
+        const labs = getCached('data_labs', 600, () => sheetToObjects(getSheet(SHEET_LABS)));
+        const blocks = getCached('data_blocks', 600, () => sheetToObjects(getSheet(SHEET_BLOCKS)));
+        const equipment = getCached('data_equipment', 600, () => sheetToObjects(getSheet(SHEET_EQUIPMENT)));
+        const reservations = fecha ? getReservationsForMonth(fecha) : [];
+        return jsonResponse({ ok: true, data: { labs, blocks, equipment, reservations } });
+      }
+
       case 'init': {
-        const labs = sheetToObjects(getSheet(SHEET_LABS));
-        const blocks = sheetToObjects(getSheet(SHEET_BLOCKS));
-        const equipment = sheetToObjects(getSheet(SHEET_EQUIPMENT));
+        const labs = getCached('data_labs', 600, () => sheetToObjects(getSheet(SHEET_LABS)));
+        const blocks = getCached('data_blocks', 600, () => sheetToObjects(getSheet(SHEET_BLOCKS)));
+        const equipment = getCached('data_equipment', 600, () => sheetToObjects(getSheet(SHEET_EQUIPMENT)));
         return jsonResponse({ ok: true, data: { labs, blocks, equipment } });
       }
 
@@ -62,13 +88,13 @@ function doGet(e) {
       }
 
       case 'getLabs':
-        return jsonResponse({ ok: true, data: sheetToObjects(getSheet(SHEET_LABS)) });
+        return jsonResponse({ ok: true, data: getCached('data_labs', 600, () => sheetToObjects(getSheet(SHEET_LABS))) });
 
       case 'getBlocks':
-        return jsonResponse({ ok: true, data: sheetToObjects(getSheet(SHEET_BLOCKS)) });
+        return jsonResponse({ ok: true, data: getCached('data_blocks', 600, () => sheetToObjects(getSheet(SHEET_BLOCKS))) });
 
       case 'getEquipment':
-        return jsonResponse({ ok: true, data: sheetToObjects(getSheet(SHEET_EQUIPMENT)) });
+        return jsonResponse({ ok: true, data: getCached('data_equipment', 600, () => sheetToObjects(getSheet(SHEET_EQUIPMENT))) });
 
       case 'getReservations': {
         const fecha = e.parameter.fecha;
@@ -136,8 +162,7 @@ function formatDate(d) {
 }
 
 function enrichReservations(reservas) {
-  const equipSheet = getSheet(SHEET_RES_EQUIPMENT);
-  const allEquip = sheetToObjects(equipSheet);
+  const allEquip = getCached('data_res_equip', 30, () => sheetToObjects(getSheet(SHEET_RES_EQUIPMENT)));
   return reservas.map(r => ({
     ...r,
     Fecha: formatDate(r.Fecha),
@@ -195,7 +220,7 @@ function getReservationsForMonth(fechaStr) {
 // --- Disponibilidad de equipos ---
 
 function getEquipmentAvailability(labId, fecha, bloqueId) {
-  const equipos = sheetToObjects(getSheet(SHEET_EQUIPMENT));
+  const equipos = getCached('data_equipment', 600, () => sheetToObjects(getSheet(SHEET_EQUIPMENT)));
   const reservas = sheetToObjects(getSheet(SHEET_RESERVATIONS));
   const resEquipos = sheetToObjects(getSheet(SHEET_RES_EQUIPMENT));
 
@@ -222,6 +247,71 @@ function getEquipmentAvailability(labId, fecha, bloqueId) {
   });
 }
 
+// --- Email de confirmación ---
+
+function sendConfirmationEmail(email, nombre, reservationData) {
+  const { labName, fecha, bloques, actividad, equipos } = reservationData;
+  const bloquesText = bloques.join(', ');
+  const equiposHtml = equipos && equipos.length > 0
+    ? '<ul>' + equipos.map(e => '<li>' + e.nombre + ' &times; ' + e.cantidad + '</li>').join('') + '</ul>'
+    : '<p>Sin equipos seleccionados</p>';
+
+  const html = '<div style="font-family:Arial,sans-serif;max-width:600px">' +
+    '<h2 style="color:#0d6efd">Reserva Confirmada</h2>' +
+    '<p>Hola <strong>' + nombre + '</strong>,</p>' +
+    '<p>Tu reserva ha sido registrada exitosamente:</p>' +
+    '<table style="border-collapse:collapse;width:100%">' +
+      '<tr><td style="padding:8px;border:1px solid #dee2e6"><strong>Laboratorio</strong></td>' +
+          '<td style="padding:8px;border:1px solid #dee2e6">' + labName + '</td></tr>' +
+      '<tr><td style="padding:8px;border:1px solid #dee2e6"><strong>Fecha</strong></td>' +
+          '<td style="padding:8px;border:1px solid #dee2e6">' + fecha + '</td></tr>' +
+      '<tr><td style="padding:8px;border:1px solid #dee2e6"><strong>Bloque(s)</strong></td>' +
+          '<td style="padding:8px;border:1px solid #dee2e6">' + bloquesText + '</td></tr>' +
+      '<tr><td style="padding:8px;border:1px solid #dee2e6"><strong>Actividad</strong></td>' +
+          '<td style="padding:8px;border:1px solid #dee2e6">' + (actividad || '-') + '</td></tr>' +
+    '</table>' +
+    '<h3>Equipos:</h3>' +
+    equiposHtml +
+    '<hr>' +
+    '<p style="color:#6c757d;font-size:12px">Sistema de Gesti&oacute;n de Labs de SJO</p>' +
+    '</div>';
+
+  MailApp.sendEmail({
+    to: email,
+    subject: 'Reserva confirmada — ' + labName + ' — ' + fecha,
+    htmlBody: html
+  });
+}
+
+function sendCancellationEmail(email, nombre, reservationData) {
+  const { labName, fecha, bloques, actividad } = reservationData;
+  const bloquesText = bloques.join(', ');
+
+  const html = '<div style="font-family:Arial,sans-serif;max-width:600px">' +
+    '<h2 style="color:#dc3545">Reserva Cancelada</h2>' +
+    '<p>Hola <strong>' + nombre + '</strong>,</p>' +
+    '<p>Tu reserva ha sido cancelada exitosamente:</p>' +
+    '<table style="border-collapse:collapse;width:100%">' +
+      '<tr><td style="padding:8px;border:1px solid #dee2e6"><strong>Laboratorio</strong></td>' +
+          '<td style="padding:8px;border:1px solid #dee2e6">' + labName + '</td></tr>' +
+      '<tr><td style="padding:8px;border:1px solid #dee2e6"><strong>Fecha</strong></td>' +
+          '<td style="padding:8px;border:1px solid #dee2e6">' + fecha + '</td></tr>' +
+      '<tr><td style="padding:8px;border:1px solid #dee2e6"><strong>Bloque(s)</strong></td>' +
+          '<td style="padding:8px;border:1px solid #dee2e6">' + bloquesText + '</td></tr>' +
+      '<tr><td style="padding:8px;border:1px solid #dee2e6"><strong>Actividad</strong></td>' +
+          '<td style="padding:8px;border:1px solid #dee2e6">' + (actividad || '-') + '</td></tr>' +
+    '</table>' +
+    '<hr>' +
+    '<p style="color:#6c757d;font-size:12px">Sistema de Gesti&oacute;n de Labs de SJO</p>' +
+    '</div>';
+
+  MailApp.sendEmail({
+    to: email,
+    subject: 'Reserva cancelada — ' + labName + ' — ' + fecha,
+    htmlBody: html
+  });
+}
+
 // --- Crear reserva ---
 
 function createReservation(body) {
@@ -245,6 +335,9 @@ function createReservation(body) {
     return { ok: false, error: 'Sistema ocupado, intenta de nuevo' };
   }
 
+  let result;
+  let emailData = null;
+
   try {
     const resSheet = getSheet(SHEET_RESERVATIONS);
     const existentes = sheetToObjects(resSheet);
@@ -257,20 +350,29 @@ function createReservation(body) {
         String(r.BloqueID) === String(bloqueId)
       );
       if (ocupado) {
-        const bloque = sheetToObjects(getSheet(SHEET_BLOCKS)).find(b => String(b.ID) === String(bloqueId));
+        const blocks = getCached('data_blocks', 600, () => sheetToObjects(getSheet(SHEET_BLOCKS)));
+        const bloque = blocks.find(b => String(b.ID) === String(bloqueId));
         return { ok: false, error: 'Ya reservado: ' + (bloque ? bloque.Etiqueta : 'Bloque ' + bloqueId) };
       }
     }
 
-    // Validar equipos contra el primer bloque (referencia de disponibilidad)
+    // Validar equipos — inline con datos ya cargados + cached equipment catalog
     if (equipos && equipos.length > 0) {
-      const disponibilidad = getEquipmentAvailability(labId, fecha, bloqueIds[0]);
+      const equipCatalog = getCached('data_equipment', 600, () => sheetToObjects(getSheet(SHEET_EQUIPMENT)));
+      const resEquipos = sheetToObjects(getSheet(SHEET_RES_EQUIPMENT));
+
+      const relevantes = equipCatalog.filter(eq => String(eq.LabID) === '' || String(eq.LabID) === String(labId));
+      const resBloque = existentes.filter(r => formatDate(r.Fecha) === fecha && String(r.BloqueID) === String(bloqueIds[0]));
+      const resIds = resBloque.map(r => String(r.ID));
+      const eqReservados = resEquipos.filter(re => resIds.includes(String(re.ReservaID)));
+
       for (const eq of equipos) {
-        const info = disponibilidad.find(d => String(d.ID) === String(eq.equipoId));
-        if (!info)
-          return { ok: false, error: 'Equipo no encontrado: ' + eq.equipoId };
-        if (eq.cantidad > info.Disponible)
-          return { ok: false, error: 'No hay suficiente disponibilidad de: ' + info.Nombre };
+        const info = relevantes.find(d => String(d.ID) === String(eq.equipoId));
+        if (!info) return { ok: false, error: 'Equipo no encontrado' };
+        const reservados = eqReservados.filter(re => String(re.EquipoID) === String(eq.equipoId))
+          .reduce((sum, re) => sum + Number(re.Cantidad), 0);
+        if (eq.cantidad > Number(info.Cantidad) - reservados)
+          return { ok: false, error: 'Sin disponibilidad de: ' + info.Nombre };
       }
     }
 
@@ -280,29 +382,65 @@ function createReservation(body) {
 
     const createdIds = [];
     const now = new Date().toISOString();
-    const eqSheet = (equipos && equipos.length > 0) ? getSheet(SHEET_RES_EQUIPMENT) : null;
 
-    // Crear una reserva por cada bloque seleccionado
+    // Batch: collect all rows first
+    const reservationRows = [];
+    const equipmentRows = [];
     for (const bloqueId of bloqueIds) {
       maxId++;
-      resSheet.appendRow([
-        maxId, labId, fecha, bloqueId, email, nombreReal,
-        actividad || '', now
-      ]);
-
-      if (eqSheet && equipos.length > 0) {
-        equipos.forEach(eq => {
-          eqSheet.appendRow([maxId, eq.equipoId, eq.cantidad]);
-        });
-      }
-
+      reservationRows.push([maxId, labId, fecha, bloqueId, email, nombreReal, actividad || '', now]);
       createdIds.push(maxId);
+      if (equipos && equipos.length > 0) {
+        equipos.forEach(eq => equipmentRows.push([maxId, eq.equipoId, eq.cantidad]));
+      }
     }
 
-    return { ok: true, data: { ids: createdIds, count: createdIds.length } };
+    // Batch write reservations
+    const lastRow = resSheet.getLastRow();
+    resSheet.getRange(lastRow + 1, 1, reservationRows.length, 8).setValues(reservationRows);
+
+    // Batch write equipment
+    if (equipmentRows.length > 0) {
+      const eqSheet = getSheet(SHEET_RES_EQUIPMENT);
+      eqSheet.getRange(eqSheet.getLastRow() + 1, 1, equipmentRows.length, 3).setValues(equipmentRows);
+    }
+
+    // Invalidate res_equip cache after write
+    CacheService.getScriptCache().remove('data_res_equip');
+
+    // Prepare email data (resolve names while still in lock)
+    const labs = getCached('data_labs', 600, () => sheetToObjects(getSheet(SHEET_LABS)));
+    const blocks = getCached('data_blocks', 600, () => sheetToObjects(getSheet(SHEET_BLOCKS)));
+    const labInfo = labs.find(l => String(l.ID) === String(labId));
+    const bloqueLabels = bloqueIds.map(bid => {
+      const b = blocks.find(bl => String(bl.ID) === String(bid));
+      return b ? b.Etiqueta : 'Bloque ' + bid;
+    });
+    const equipoNames = equipos ? equipos.map(eq => {
+      const equipCatalog = getCached('data_equipment', 600, () => sheetToObjects(getSheet(SHEET_EQUIPMENT)));
+      const info = equipCatalog.find(e => String(e.ID) === String(eq.equipoId));
+      return { nombre: info ? info.Nombre : 'Equipo ' + eq.equipoId, cantidad: eq.cantidad };
+    }) : [];
+
+    emailData = {
+      labName: labInfo ? labInfo.Nombre : 'Lab ' + labId,
+      fecha,
+      bloques: bloqueLabels,
+      actividad,
+      equipos: equipoNames
+    };
+
+    result = { ok: true, data: { ids: createdIds, count: createdIds.length } };
   } finally {
     lock.releaseLock();
   }
+
+  // Email FUERA del lock
+  if (emailData) {
+    try { sendConfirmationEmail(email, nombreReal, emailData); } catch(e) { /* no bloquear si falla email */ }
+  }
+
+  return result;
 }
 
 // --- Cancelar reserva ---
@@ -325,20 +463,39 @@ function cancelReservation(body) {
     return { ok: false, error: 'Sistema ocupado, intenta de nuevo' };
   }
 
+  let result;
+  let emailData = null;
+  const nombreReal = user.Nombre;
+
   try {
     const resSheet = getSheet(SHEET_RESERVATIONS);
     const data = resSheet.getDataRange().getValues();
 
     let rowToDelete = -1;
+    let reservaRow = null;
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(reservaId) && String(data[i][4]).trim().toLowerCase() === email.trim().toLowerCase()) {
         rowToDelete = i + 1;
+        reservaRow = data[i];
         break;
       }
     }
 
     if (rowToDelete === -1)
       return { ok: false, error: 'Reserva no encontrada o email no coincide' };
+
+    // Collect email data before deleting
+    const labs = getCached('data_labs', 600, () => sheetToObjects(getSheet(SHEET_LABS)));
+    const blocks = getCached('data_blocks', 600, () => sheetToObjects(getSheet(SHEET_BLOCKS)));
+    const labInfo = labs.find(l => String(l.ID) === String(reservaRow[1]));
+    const blockInfo = blocks.find(b => String(b.ID) === String(reservaRow[3]));
+
+    emailData = {
+      labName: labInfo ? labInfo.Nombre : 'Lab ' + reservaRow[1],
+      fecha: formatDate(reservaRow[2]),
+      bloques: [blockInfo ? blockInfo.Etiqueta : 'Bloque ' + reservaRow[3]],
+      actividad: reservaRow[6] || ''
+    };
 
     resSheet.deleteRow(rowToDelete);
 
@@ -350,8 +507,18 @@ function cancelReservation(body) {
       }
     }
 
-    return { ok: true };
+    // Invalidate res_equip cache after write
+    CacheService.getScriptCache().remove('data_res_equip');
+
+    result = { ok: true };
   } finally {
     lock.releaseLock();
   }
+
+  // Email FUERA del lock
+  if (emailData) {
+    try { sendCancellationEmail(email, nombreReal, emailData); } catch(e) { /* no bloquear si falla email */ }
+  }
+
+  return result;
 }
