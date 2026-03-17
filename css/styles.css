@@ -1,228 +1,615 @@
 /* ============================================
-   Estilos - Sistema de Reserva de Laboratorios
+   Sistema de Reserva de Salas SJO
+   Professional UI Theme
    ============================================ */
 
 :root {
-  --color-free: #d4edda;
-  --color-free-hover: #b8dfc5;
-  --color-occupied: #f8d7da;
-  --color-mine: #fff3cd;
+  --color-bg: #f4f6f9;
+  --color-surface: #ffffff;
+  --color-border: #e2e6ed;
+  --color-border-light: #eef1f6;
+
+  --color-text: #1e293b;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #94a3b8;
+
+  --color-primary: #3b5bdb;
+  --color-primary-hover: #3050c4;
+  --color-primary-subtle: #edf2ff;
+  --color-primary-border: #bac8ff;
+
+  --color-free: #ecfdf5;
+  --color-free-hover: #d1fae5;
+  --color-free-accent: #059669;
+  --color-occupied: #fef2f2;
+  --color-occupied-accent: #dc2626;
+  --color-mine: #fffbeb;
+  --color-mine-hover: #fef3c7;
+  --color-mine-accent: #d97706;
+
+  --color-selected: #dbeafe;
+  --color-selected-border: #3b82f6;
+  --color-cancel-selected: #fee2e2;
+  --color-cancel-selected-border: #ef4444;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.08);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,.1);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --navbar-height: 56px;
+}
+
+/* --- Base --- */
+*, *::before, *::after {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background-color: #f5f6fa;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+small { font-size: 0.8125em; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c1c8d4; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a0a8b8; }
+
+/* ── Login ───────────────────────────────────────────── */
+
+#login-screen {
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8ecf4 50%, #f4f6f9 100%);
+}
+
+#login-screen .card {
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--color-border-light);
+}
+
+#login-screen .card-body { padding: 2.5rem !important; }
+
+#login-screen .card-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+#login-screen .form-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+#login-screen .form-control {
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+  border-color: var(--color-border);
+  font-size: 0.9375rem;
+}
+
+#login-screen .form-control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 91, 219, 0.15);
+}
+
+#login-screen .btn-primary {
+  padding: 0.625rem;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+#login-screen .btn-primary:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+/* ── Navbar ──────────────────────────────────────────── */
+
+.navbar {
+  background: #1e293b !important;
+  min-height: var(--navbar-height);
+  padding: 0 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
 }
 
 .navbar-brand {
   font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+  color: #fff !important;
 }
 
-/* Grilla del calendario */
-.calendar-table {
-  table-layout: fixed;
+.navbar-nav .nav-link {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(255,255,255,.7) !important;
+  padding: 0.5rem 0.875rem !important;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
 }
 
-.calendar-table th {
-  font-size: 0.85rem;
-  vertical-align: middle;
-  background-color: #f8f9fa;
+.navbar-nav .nav-link:hover {
+  color: #fff !important;
+  background: rgba(255,255,255,.08);
 }
 
-.lab-header {
-  min-width: 160px;
-  width: 180px;
+.navbar-nav .nav-link.active {
+  color: #fff !important;
+  background: rgba(255,255,255,.12);
 }
 
-.calendar-cell {
-  height: 60px;
-  vertical-align: middle;
-  text-align: center;
-  cursor: pointer;
-  transition: background-color 0.15s;
-  font-size: 0.8rem;
+#user-display {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,.6) !important;
 }
 
-.cell-free {
-  background-color: var(--color-free);
+#btn-logout {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
 }
 
-.cell-free:hover {
-  background-color: var(--color-free-hover);
+/* ── Main Container ──────────────────────────────────── */
+
+.container-fluid.mt-3 {
+  margin-top: 1.25rem !important;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  max-width: 1440px;
 }
 
-.cell-occupied {
-  background-color: var(--color-occupied);
-  cursor: default;
-}
+/* ── Toolbar ─────────────────────────────────────────── */
 
-.cell-mine {
-  background-color: var(--color-mine);
-  cursor: pointer;
-}
-
-.cell-mine:hover {
-  background-color: #ffe69c;
-  box-shadow: inset 0 0 0 2px #ffc107;
-}
-
-/* Navegación de fecha */
 .date-nav {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .date-nav h5 {
   margin: 0;
-  min-width: 280px;
+  min-width: 260px;
   text-align: center;
-}
-
-/* Modal de reserva */
-#reservationModal .modal-dialog {
-  max-width: 650px;
-}
-
-/* Lista de equipos */
-.equip-qty {
-  text-align: center;
-}
-
-.list-group-item {
-  transition: background-color 0.1s;
-}
-
-/* Toast */
-#toast-container {
-  position: fixed;
-  top: 80px;
-  right: 20px;
-  z-index: 1100;
-}
-
-/* Vista mis reservas */
-#my-email-display {
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
-/* ============================================
-   Vista Mensual
-   ============================================ */
+.date-nav .btn {
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.625rem;
+  border-radius: var(--radius-sm);
+}
+
+.date-nav .form-control-sm {
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border-color: var(--color-border);
+}
+
+.btn-view-mode {
+  font-size: 0.75rem !important;
+  font-weight: 500;
+  padding: 0.3rem 0.75rem !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-secondary) !important;
+  background: var(--color-surface);
+}
+
+.btn-view-mode:hover {
+  background: var(--color-bg) !important;
+  color: var(--color-text) !important;
+}
+
+.btn-view-mode.active {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+
+/* ── Legend Bar ───────────────────────────────────────── */
+
+.legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.legend-hint {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  margin-left: 0.25rem;
+}
+
+/* ── Calendar Grid ───────────────────────────────────── */
+
+.calendar-table {
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8125rem;
+}
+
+.calendar-table th {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  vertical-align: middle;
+  background-color: var(--color-bg);
+  border-color: var(--color-border-light);
+  padding: 0.5rem;
+}
+
+.calendar-table td {
+  border-color: var(--color-border-light);
+}
+
+.sala-header {
+  min-width: 150px;
+  width: 170px;
+  font-size: 0.8125rem;
+  background: var(--color-bg) !important;
+}
+
+.sala-header strong {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.sala-header small {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+
+.calendar-cell {
+  height: 64px;
+  vertical-align: middle;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  font-size: 0.75rem;
+  position: relative;
+}
+
+.cell-free { background-color: var(--color-free); }
+.cell-free:hover { background-color: var(--color-free-hover); }
+.cell-free small { color: var(--color-free-accent); font-weight: 500; }
+
+.cell-occupied { background-color: var(--color-occupied); cursor: default; }
+.cell-occupied small { color: var(--color-occupied-accent); }
+.cell-occupied strong { color: var(--color-text); font-weight: 600; font-size: 0.6875rem; }
+
+.cell-mine { background-color: var(--color-mine); cursor: pointer; }
+.cell-mine:hover { background-color: var(--color-mine-hover); box-shadow: inset 0 0 0 2px var(--color-mine-accent); }
+.cell-mine small { color: var(--color-mine-accent); }
+.cell-mine strong { color: var(--color-text); font-weight: 600; font-size: 0.6875rem; }
+
+#calendar-grid h5 { font-size: 0.9375rem; font-weight: 600; }
+#calendar-grid h5 small { font-weight: 400; color: var(--color-text-muted); }
+
+/* ── Selection States ────────────────────────────────── */
+
+.cell-selected {
+  background-color: var(--color-selected) !important;
+  border: 2px solid var(--color-selected-border) !important;
+  box-shadow: inset 0 0 0 1px var(--color-selected-border);
+}
+
+.cell-selected:hover { background-color: #bfdbfe !important; }
+
+.cell-cancel-selected {
+  background-color: var(--color-cancel-selected) !important;
+  border: 2px solid var(--color-cancel-selected-border) !important;
+  box-shadow: inset 0 0 0 1px var(--color-cancel-selected-border);
+}
+
+.cell-cancel-selected:hover { background-color: #fecaca !important; }
+
+/* ── Selection Bars ──────────────────────────────────── */
+
+.selection-bar,
+.cancel-selection-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1050;
+  border-radius: var(--radius-md);
+  padding: 0.625rem 1rem;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow-md);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.selection-bar {
+  background: var(--color-primary-subtle);
+  border: 1px solid var(--color-primary-border);
+}
+
+.cancel-selection-bar {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.selection-bar .btn,
+.cancel-selection-bar .btn {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+}
+
+/* ── Month View ──────────────────────────────────────── */
 
 .month-table {
   table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
 }
+
+.month-table th {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border-color: var(--color-border-light);
+  padding: 0.5rem;
+}
+
+.month-table td { border-color: var(--color-border-light); }
 
 .month-cell {
   vertical-align: top;
-  height: 110px;
-  padding: 4px 6px !important;
+  height: 108px;
+  padding: 0.375rem 0.5rem !important;
   cursor: pointer;
-  transition: background-color 0.15s;
+  transition: background-color 0.12s;
+  background: var(--color-surface);
 }
 
-.month-cell:hover {
-  background-color: #e9ecef;
-}
+.month-cell:hover { background-color: #f1f5f9; }
 
 .month-cell-empty {
-  background-color: #f8f9fa;
+  background-color: var(--color-bg);
   cursor: default;
 }
-
-.month-cell-empty:hover {
-  background-color: #f8f9fa;
-}
+.month-cell-empty:hover { background-color: var(--color-bg); }
 
 .month-cell-today {
-  border: 2px solid #0d6efd !important;
-  background-color: #e7f1ff;
+  border: 2px solid var(--color-primary) !important;
+  background-color: var(--color-primary-subtle);
 }
 
 .month-day-number {
   font-weight: 700;
-  font-size: 0.95rem;
-  margin-bottom: 2px;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  margin-bottom: 3px;
 }
 
-.month-day-content {
-  font-size: 0.7rem;
-}
+.month-day-content { font-size: 0.6875rem; }
 
 .month-lab-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .month-lab-name {
   flex-shrink: 0;
-  width: 55px;
+  width: 50px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.65rem;
+  font-size: 0.625rem;
+  color: var(--color-text-secondary);
 }
 
 .month-progress {
   flex-grow: 1;
-  height: 6px !important;
+  height: 5px !important;
   border-radius: 3px;
+  background-color: var(--color-border-light);
 }
 
-/* Celda seleccionada */
-.cell-selected {
-  background-color: #a8d8ff !important;
-  border: 2px solid #0d6efd !important;
-  box-shadow: inset 0 0 0 1px #0d6efd;
+/* ── Modals ──────────────────────────────────────────── */
+
+.modal-content {
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
 }
 
-.cell-selected:hover {
-  background-color: #8ec8f6 !important;
+.modal-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
-/* Barra de selección flotante */
-.selection-bar {
-  position: sticky;
-  top: 0;
-  z-index: 1050;
-  background: #e7f1ff;
-  border: 1px solid #b6d4fe;
-  border-radius: 6px;
-  padding: 8px 16px;
-  margin-bottom: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.modal-title { font-size: 1rem; font-weight: 600; }
+.modal-body { padding: 1.25rem; }
+
+.modal-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--color-border-light);
 }
 
-/* Responsive */
+#reservationModal .modal-dialog { max-width: 640px; }
+
+#reservationModal .alert-light {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  padding: 0.75rem 1rem;
+}
+
+#reservationModal .alert-light strong { color: var(--color-text); font-weight: 600; }
+
+#cancelModal .bg-warning-subtle {
+  background: #fffbeb !important;
+  border-bottom-color: #fef3c7 !important;
+}
+
+/* ── Buttons ─────────────────────────────────────────── */
+
+.btn {
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  transition: all 0.12s ease;
+}
+
+.btn-sm { font-size: 0.75rem; padding: 0.3rem 0.625rem; }
+
+.btn-primary { background: var(--color-primary); border-color: var(--color-primary); }
+.btn-primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+
+.btn-outline-primary { color: var(--color-primary); border-color: var(--color-primary); }
+.btn-outline-primary:hover { background: var(--color-primary); border-color: var(--color-primary); }
+
+.btn-success { background: #059669; border-color: #059669; }
+.btn-success:hover { background: #047857; border-color: #047857; }
+
+.btn-danger { background: #dc2626; border-color: #dc2626; }
+.btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+
+/* ── Form Controls ───────────────────────────────────── */
+
+.form-control, .form-select {
+  border-color: var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 91, 219, 0.12);
+}
+
+.form-control-sm, .form-select-sm {
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.form-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+/* ── Cards ───────────────────────────────────────────── */
+
+.card {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-body { padding: 1rem; }
+.card-title { font-weight: 600; font-size: 0.875rem; }
+
+/* ── Toast ───────────────────────────────────────────── */
+
+#toast-container {
+  position: fixed;
+  top: calc(var(--navbar-height) + 12px);
+  right: 16px;
+  z-index: 1100;
+}
+
+#toast-container .toast {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.8125rem;
+}
+
+/* ── Mis Reservas ────────────────────────────────────── */
+
+#view-mis-reservas h4 { font-size: 1.0625rem; font-weight: 600; }
+#my-email-display { font-weight: 500; font-size: 0.8125rem; color: var(--color-text-muted); }
+
+#my-reservations-list .card { transition: box-shadow 0.12s; }
+#my-reservations-list .card:hover { box-shadow: var(--shadow-md); }
+
+/* ── Badges ──────────────────────────────────────────── */
+
+.badge { font-weight: 500; letter-spacing: 0.02em; }
+.badge.bg-secondary { background: #e2e8f0 !important; color: var(--color-text-secondary) !important; }
+.badge.bg-success { background: #dcfce7 !important; color: #166534 !important; }
+.badge.bg-danger { background: #fee2e2 !important; color: #991b1b !important; }
+.badge.bg-primary { background: var(--color-primary-subtle) !important; color: var(--color-primary) !important; }
+
+/* ── Misc ────────────────────────────────────────────── */
+
+.spinner-border { width: 1.5rem; height: 1.5rem; border-width: 2px; color: var(--color-primary); }
+.alert { font-size: 0.8125rem; border-radius: var(--radius-md); }
+.table { margin-bottom: 0; }
+.table-bordered > :not(caption) > * > * { border-color: var(--color-border-light); }
+.progress { background-color: var(--color-border-light); }
+.progress-bar.bg-success { background-color: #22c55e !important; }
+.progress-bar.bg-warning { background-color: #f59e0b !important; }
+.progress-bar.bg-danger  { background-color: #ef4444 !important; }
+
+/* ── Responsive ──────────────────────────────────────── */
+
+@media (max-width: 992px) {
+  .container-fluid.mt-3 { padding-left: 1rem; padding-right: 1rem; }
+  .date-nav h5 { min-width: 200px; font-size: 0.8125rem; }
+}
+
 @media (max-width: 768px) {
-  .calendar-cell {
-    height: 50px;
-    font-size: 0.7rem;
-  }
+  .calendar-cell { height: 52px; font-size: 0.6875rem; }
+  .sala-header { min-width: 100px; width: 110px; }
+  .sala-header strong { font-size: 0.75rem; }
+  .date-nav { gap: 0.25rem; }
+  .date-nav h5 { font-size: 0.75rem; min-width: auto; }
+  .month-cell { height: 76px; padding: 2px 3px !important; }
+  .month-lab-name { display: none; }
+  .month-day-number { font-size: 0.75rem; }
+  .selection-bar, .cancel-selection-bar { font-size: 0.75rem; padding: 0.5rem 0.75rem; }
+  .container-fluid.mt-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+}
 
-  .lab-header {
-    min-width: 100px;
-    width: 120px;
-    font-size: 0.8rem;
-  }
-
-  .date-nav h5 {
-    font-size: 0.95rem;
-    min-width: auto;
-  }
-
-  .month-cell {
-    height: 80px;
-    padding: 2px 3px !important;
-  }
-
-  .month-lab-name {
-    display: none;
-  }
-
-  .month-day-number {
-    font-size: 0.8rem;
-  }
+@media (max-width: 480px) {
+  .date-nav { flex-wrap: wrap; }
+  .calendar-cell { height: 44px; font-size: 0.625rem; }
+  .sala-header { min-width: 80px; width: 90px; font-size: 0.6875rem; }
 }

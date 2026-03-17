@@ -1,8 +1,9 @@
-// ============================================
-// API - Comunicación con Google Apps Script
-// ============================================
+/* ============================================
+   API - Comunicación con Google Apps Script
+   Sistema de Reserva de Salas SJO
+   ============================================ */
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbzS7vTJPY88GmVUULiQnCoCpSipxloABhiVnNRFfdFtubmdtk56Uzoes1UjUV9_Tpxk/exec';
+const API_URL = 'https://script.google.com/macros/s/TU_DEPLOYMENT_ID/exec';
 
 const Api = {
   async get(params) {
@@ -25,24 +26,8 @@ const Api = {
     return this.get({ action: 'fullInit', fecha });
   },
 
-  init() {
-    return this.get({ action: 'init' });
-  },
-
   login(email) {
     return this.get({ action: 'login', email });
-  },
-
-  getLabs() {
-    return this.get({ action: 'getLabs' });
-  },
-
-  getBlocks() {
-    return this.get({ action: 'getBlocks' });
-  },
-
-  getEquipment() {
-    return this.get({ action: 'getEquipment' });
   },
 
   getReservations(fecha) {
@@ -57,15 +42,15 @@ const Api = {
     return this.get({ action: 'getMonth', fecha });
   },
 
-  getAvailability(labId, fecha, bloqueId) {
-    return this.get({ action: 'getAvailability', labId, fecha, bloqueId });
-  },
-
   createReservation(data) {
     return this.post({ action: 'createReservation', ...data });
   },
 
   cancelReservation(reservaId, email) {
     return this.post({ action: 'cancelReservation', reservaId, email });
+  },
+
+  cancelRecurrenceGroup(recurrenciaGrupo, email) {
+    return this.post({ action: 'cancelRecurrenceGroup', recurrenciaGrupo, email });
   }
 };

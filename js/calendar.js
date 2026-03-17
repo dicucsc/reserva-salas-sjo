@@ -1,26 +1,33 @@
-// ============================================
-// Vista de Calendario / Grilla de Ocupación
-// ============================================
+/* ============================================
+   Vista de Calendario / Grilla de Ocupación
+   Sistema de Reserva de Salas SJO
+   ============================================ */
 
 const Calendar = {
   currentDate: new Date(),
-  labs: [],
-  blocks: [],
-  reservations: [],    // reservas filtradas para la vista actual
-  allReservations: [], // cache de todas las reservas del mes cargado
-  loadedMonth: null,   // 'YYYY-MM' del mes actualmente en cache
-  viewMode: 'day', // 'day', 'week', 'month'
+  salas: [],
+  bloques: [],
+  reservations: [],
+  allReservations: [],
+  loadedMonth: null,
+  viewMode: 'day',
   refreshInterval: null,
 
-  // Selección múltiple de celdas (acumulativa, tipo Excel)
-  selection: [], // [{ labId, labName, fecha, bloqueId, bloqueLabel }]
-  lastClicked: null, // { labId, fecha, blockIndex } para shift+click
+  // Selección múltiple de celdas libres (para reservar)
+  selection: [],
+  lastClicked: null,
+
+  // Selección múltiple de celdas propias (para cancelar)
+  cancelSelection: [],
 
   formatDate(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    if (d instanceof Date) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+    return String(d).substring(0, 10);
   },
 
   formatDisplayDate(d) {
@@ -42,38 +49,24 @@ const Calendar = {
     return date;
   },
 
+  getMonthKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  },
+
+  // ── Init ────────────────────────────────────────────────
+
   async init() {
-    // fullInit: labs + blocks + equipment + reservations del mes en 1 sola llamada
     const fecha = this.formatDate(this.currentDate);
     const res = await Api.fullInit(fecha);
     if (res.ok) {
-      this.labs = res.data.labs;
-      this.blocks = res.data.blocks;
-      Equipment.allEquipment = res.data.equipment;
-      Equipment.categories = [...new Set(res.data.equipment.map(e => e.Categoria).filter(Boolean))].sort();
-      this.allReservations = res.data.reservations;
+      this.salas = res.data.salas;
+      this.bloques = res.data.bloques;
+      this.allReservations = res.data.reservas;
       this.loadedMonth = this.getMonthKey(this.currentDate);
     }
     this.setupNavigation();
     this.filterReservationsForView();
-
-    const dateStr = this.formatDate(this.currentDate);
-    if (this.viewMode === 'day') {
-      document.getElementById('current-date').textContent = this.formatDisplayDate(this.currentDate);
-      this.renderDayGrid();
-    } else if (this.viewMode === 'week') {
-      const monday = this.getMonday(this.currentDate);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      document.getElementById('current-date').textContent =
-        `${this.formatDisplayDate(monday)} — ${this.formatDisplayDate(sunday)}`;
-      this.renderWeekGrid();
-    } else {
-      document.getElementById('current-date').textContent = this.formatMonthYear(this.currentDate);
-      this.renderMonthGrid();
-    }
-    this.updateSelectionUI();
-
+    this.renderCurrentView();
     this.startAutoRefresh();
   },
 
@@ -120,7 +113,7 @@ const Calendar = {
     this.loadAndRender();
   },
 
-  // --- Auto-refresh ---
+  // ── Auto-refresh ──────────────────────────────────────
 
   startAutoRefresh() {
     this.stopAutoRefresh();
@@ -129,7 +122,7 @@ const Calendar = {
       await this.ensureMonthLoaded();
       this.filterReservationsForView();
       this.renderCurrentView();
-    }, 90000); // cada 90 segundos
+    }, 90000);
   },
 
   stopAutoRefresh() {
@@ -139,12 +132,12 @@ const Calendar = {
     }
   },
 
-  // --- Selección múltiple ---
-
   invalidateCache() {
     this.loadedMonth = null;
     this.allReservations = [];
   },
+
+  // ── Selection (reservar) ──────────────────────────────
 
   clearSelection() {
     this.selection = [];
@@ -152,54 +145,55 @@ const Calendar = {
     this.updateSelectionBar();
   },
 
-  isSelected(labId, fecha, bloqueId) {
+  isSelected(salaId, fecha, bloqueId) {
     return this.selection.some(s =>
-      s.labId === labId && s.fecha === fecha && s.bloqueId === bloqueId
+      s.salaId === salaId && s.fecha === fecha && s.bloqueId === bloqueId
     );
   },
 
-  toggleCell(labId, labName, fecha, bloqueId, bloqueLabel, blockIndex, event) {
+  toggleCell(salaId, salaName, fecha, bloqueId, bloqueLabel, blockIndex, event) {
     const isShift = event && event.shiftKey;
 
-    if (isShift && this.lastClicked && this.lastClicked.labId === labId && this.lastClicked.fecha === fecha) {
-      // Shift+click: seleccionar rango en mismo lab+fecha
+    if (isShift && this.lastClicked && this.lastClicked.salaId === salaId && this.lastClicked.fecha === fecha) {
       const from = Math.min(this.lastClicked.blockIndex, blockIndex);
       const to = Math.max(this.lastClicked.blockIndex, blockIndex);
       for (let i = from; i <= to; i++) {
-        const block = this.blocks[i];
+        const block = this.bloques[i];
         if (!block) continue;
         const bId = String(block.ID);
         const isOccupied = this.allReservations.some(r =>
-          String(r.LabID) === labId && String(r.BloqueID) === bId && r.Fecha === fecha
+          String(r.SalaID) === salaId && String(r.BloqueID) === bId && r.Fecha === fecha
         );
-        if (!isOccupied && !this.isSelected(labId, fecha, bId)) {
-          this.selection.push({ labId, labName, fecha, bloqueId: bId, bloqueLabel: block.Etiqueta });
+        if (!isOccupied && !this.isSelected(salaId, fecha, bId)) {
+          this.selection.push({ salaId, salaName, fecha, bloqueId: bId, bloqueLabel: block.Etiqueta });
         }
       }
     } else {
-      // Click normal: toggle individual (acumulativo)
       const idx = this.selection.findIndex(s =>
-        s.labId === labId && s.fecha === fecha && s.bloqueId === bloqueId
+        s.salaId === salaId && s.fecha === fecha && s.bloqueId === bloqueId
       );
       if (idx >= 0) {
         this.selection.splice(idx, 1);
       } else {
-        this.selection.push({ labId, labName, fecha, bloqueId, bloqueLabel });
+        this.selection.push({ salaId, salaName, fecha, bloqueId, bloqueLabel });
       }
     }
 
-    this.lastClicked = { labId, fecha, blockIndex };
+    this.lastClicked = { salaId, fecha, blockIndex };
     this.updateSelectionUI();
     this.updateSelectionBar();
   },
 
   updateSelectionUI() {
-    // Quitar clase de todas las celdas
     document.querySelectorAll('.cell-selected').forEach(el => el.classList.remove('cell-selected'));
-    // Agregar clase a las seleccionadas
     this.selection.forEach(s => {
-      const cell = document.querySelector(`[data-sel="${s.labId}-${s.fecha}-${s.bloqueId}"]`);
+      const cell = document.querySelector(`[data-sel="${s.salaId}-${s.fecha}-${s.bloqueId}"]`);
       if (cell) cell.classList.add('cell-selected');
+    });
+    document.querySelectorAll('.cell-cancel-selected').forEach(el => el.classList.remove('cell-cancel-selected'));
+    this.cancelSelection.forEach(s => {
+      const cell = document.querySelector(`[data-cancel-sel="${s.reservaId}"]`);
+      if (cell) cell.classList.add('cell-cancel-selected');
     });
   },
 
@@ -207,51 +201,62 @@ const Calendar = {
     const bar = document.getElementById('selection-bar');
     if (this.selection.length === 0) {
       bar.classList.add('d-none');
-      return;
+    } else {
+      bar.classList.remove('d-none');
+      const groups = {};
+      this.selection.forEach(s => {
+        const key = `${s.salaId}|${s.fecha}`;
+        if (!groups[key]) groups[key] = { salaName: s.salaName, fecha: s.fecha, bloques: [] };
+        groups[key].bloques.push(s);
+      });
+      const lines = Object.values(groups).map(g => {
+        const bloques = g.bloques
+          .sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId))
+          .map(s => s.bloqueLabel).join(', ');
+        return `<strong>${g.salaName}</strong> — ${g.fecha} — ${g.bloques.length} bloque(s): ${bloques}`;
+      });
+      document.getElementById('sel-info').innerHTML =
+        `${this.selection.length} bloque(s) seleccionado(s):<br>` + lines.join('<br>');
     }
 
-    bar.classList.remove('d-none');
-
-    // Agrupar selección por lab+fecha
-    const groups = {};
-    this.selection.forEach(s => {
-      const key = `${s.labId}|${s.fecha}`;
-      if (!groups[key]) groups[key] = { labName: s.labName, fecha: s.fecha, bloques: [] };
-      groups[key].bloques.push(s);
-    });
-
-    const lines = Object.values(groups).map(g => {
-      const bloques = g.bloques
-        .sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId))
-        .map(s => s.bloqueLabel)
-        .join(', ');
-      return `<strong>${g.labName}</strong> — ${g.fecha} — ${g.bloques.length} bloque(s): ${bloques}`;
-    });
-
-    document.getElementById('sel-info').innerHTML =
-      `${this.selection.length} bloque(s) seleccionado(s):<br>` + lines.join('<br>');
+    // Cancel bar
+    const cancelBar = document.getElementById('cancel-selection-bar');
+    if (this.cancelSelection.length === 0) {
+      cancelBar.classList.add('d-none');
+    } else {
+      cancelBar.classList.remove('d-none');
+      const groups = {};
+      this.cancelSelection.forEach(s => {
+        const key = `${s.salaId}|${s.fecha}`;
+        if (!groups[key]) groups[key] = { salaName: s.salaName, fecha: s.fecha, bloques: [] };
+        groups[key].bloques.push(s);
+      });
+      const lines = Object.values(groups).map(g => {
+        const bloques = g.bloques
+          .sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId))
+          .map(s => s.bloqueLabel).join(', ');
+        return `<strong>${g.salaName}</strong> — ${g.fecha} — ${g.bloques.length} bloque(s): ${bloques}`;
+      });
+      document.getElementById('cancel-sel-info').innerHTML =
+        `${this.cancelSelection.length} reserva(s) para cancelar:<br>` + lines.join('<br>');
+    }
   },
 
   async openSelectionReservation() {
     if (this.selection.length === 0) return;
 
     const btn = document.querySelector('#selection-bar .btn-success');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Verificando disponibilidad...';
-    }
+    if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
 
     try {
-      // Refrescar datos del mes (force reload)
       this.invalidateCache();
       await this.ensureMonthLoaded();
       this.filterReservationsForView();
 
-      // Verificar cuáles bloques siguen libres
       const conflicts = [];
       const valid = this.selection.filter(s => {
         const occupied = this.allReservations.some(r =>
-          String(r.LabID) === s.labId && r.Fecha === s.fecha && String(r.BloqueID) === s.bloqueId
+          String(r.SalaID) === s.salaId && r.Fecha === s.fecha && String(r.BloqueID) === s.bloqueId
         );
         if (occupied) conflicts.push(s);
         return !occupied;
@@ -261,7 +266,6 @@ const Calendar = {
         this.selection = valid;
         this.updateSelectionUI();
         this.updateSelectionBar();
-        // Re-render grid con datos frescos
         this.renderCurrentView();
         App.showToast(`${conflicts.length} bloque(s) ya fueron reservados por otro usuario`, 'warning');
       }
@@ -270,35 +274,128 @@ const Calendar = {
         App.openMultiReservation(valid);
       }
     } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Reservar bloques seleccionados';
-      }
+      if (btn) { btn.disabled = false; btn.textContent = 'Reservar bloques seleccionados'; }
     }
   },
 
-  // --- Render helpers ---
+  // ── Selection (cancelar) ──────────────────────────────
 
-  renderCurrentView() {
-    if (this.viewMode === 'day') this.renderDayGrid();
-    else if (this.viewMode === 'week') this.renderWeekGrid();
-    else this.renderMonthGrid();
+  isCancelSelected(reservaId) {
+    return this.cancelSelection.some(s => s.reservaId === reservaId);
+  },
+
+  toggleCancelCell(reservaId, salaId, salaName, fecha, bloqueId, bloqueLabel) {
+    const idx = this.cancelSelection.findIndex(s => s.reservaId === reservaId);
+    if (idx >= 0) {
+      this.cancelSelection.splice(idx, 1);
+    } else {
+      this.cancelSelection.push({ reservaId, salaId, salaName, fecha, bloqueId, bloqueLabel });
+    }
     this.updateSelectionUI();
+    this.updateSelectionBar();
   },
 
-  // --- Render ---
-
-  getMonthKey(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  clearCancelSelection() {
+    this.cancelSelection = [];
+    this.updateSelectionUI();
+    this.updateSelectionBar();
   },
 
-  // Determina qué meses necesita la vista actual
+  // ── Recurrence ────────────────────────────────────────
+
+  toggleRecurrence() {
+    const options = document.getElementById('recurrence-options');
+    const btn = document.getElementById('btn-recurrence');
+    const isHidden = options.classList.contains('d-none');
+    options.classList.toggle('d-none', !isHidden);
+    btn.classList.toggle('active', isHidden);
+
+    if (isHidden) {
+      const until = new Date();
+      until.setDate(until.getDate() + 21); // 3 semanas por defecto
+      document.getElementById('recurrence-until').value = this.formatDate(until);
+    }
+  },
+
+  async applyRecurrence() {
+    if (this.selection.length === 0) return;
+
+    const untilStr = document.getElementById('recurrence-until').value;
+    if (!untilStr) { alert('Selecciona una fecha límite'); return; }
+
+    const patterns = {};
+    this.selection.forEach(s => {
+      const d = new Date(s.fecha + 'T12:00:00');
+      const dayOfWeek = d.getDay();
+      const key = `${s.salaId}|${s.bloqueId}|${dayOfWeek}`;
+      if (!patterns[key]) {
+        patterns[key] = { salaId: s.salaId, salaName: s.salaName, bloqueId: s.bloqueId, bloqueLabel: s.bloqueLabel, dayOfWeek, startDate: s.fecha };
+      }
+      if (s.fecha < patterns[key].startDate) patterns[key].startDate = s.fecha;
+    });
+
+    const untilDate = new Date(untilStr + 'T12:00:00');
+
+    // Load additional months if needed
+    const untilMonth = this.getMonthKey(untilDate);
+    const start = new Date(this.currentDate);
+    while (this.getMonthKey(start) <= untilMonth) {
+      const monthKey = this.getMonthKey(start);
+      if (monthKey !== this.loadedMonth) {
+        const res = await Api.fullInit(this.formatDate(start));
+        if (res.ok) {
+          const existingIds = new Set(this.allReservations.map(r => String(r.ID)));
+          res.data.reservas.forEach(r => {
+            if (!existingIds.has(String(r.ID))) this.allReservations.push(r);
+          });
+        }
+      }
+      start.setMonth(start.getMonth() + 1);
+    }
+
+    let added = 0;
+    Object.values(patterns).forEach(p => {
+      const cursor = new Date(p.startDate + 'T12:00:00');
+      cursor.setDate(cursor.getDate() + 7);
+
+      while (cursor <= untilDate) {
+        const dateStr = this.formatDate(cursor);
+        const salaId = String(p.salaId);
+        const bloqueId = String(p.bloqueId);
+
+        if (!this.isSelected(salaId, dateStr, bloqueId)) {
+          const occupied = this.allReservations.some(r =>
+            String(r.SalaID) === salaId && String(r.BloqueID) === bloqueId && r.Fecha === dateStr
+          );
+          if (!occupied) {
+            this.selection.push({
+              salaId, salaName: p.salaName, fecha: dateStr, bloqueId, bloqueLabel: p.bloqueLabel
+            });
+            added++;
+          }
+        }
+        cursor.setDate(cursor.getDate() + 7);
+      }
+    });
+
+    document.getElementById('recurrence-options').classList.add('d-none');
+    document.getElementById('btn-recurrence').classList.remove('active');
+    this.updateSelectionUI();
+    this.updateSelectionBar();
+
+    if (added > 0) {
+      App.showToast(`${added} bloque(s) agregados semanalmente hasta ${untilStr}`, 'success');
+    } else {
+      App.showToast('No se encontraron bloques libres adicionales', 'warning');
+    }
+  },
+
+  // ── Data loading ──────────────────────────────────────
+
   getRequiredMonths() {
     const months = new Set();
     months.add(this.getMonthKey(this.currentDate));
-
     if (this.viewMode === 'week') {
-      // La semana puede cruzar meses
       const monday = this.getMonday(this.currentDate);
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
@@ -311,27 +408,24 @@ const Calendar = {
   async ensureMonthLoaded() {
     const required = this.getRequiredMonths();
     const missing = [...required].filter(m => m !== this.loadedMonth);
+    if (missing.length === 0) return;
 
-    if (missing.length === 0) return; // ya está en cache
-
-    // Cargar el mes principal (si la semana cruza meses, cargamos el del currentDate)
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '<div class="text-center py-5"><div class="spinner-border" role="status"></div></div>';
 
     const dateStr = this.formatDate(this.currentDate);
-    const res = await Api.getMonth(dateStr);
+    const res = await Api.fullInit(dateStr);
     if (res.ok) {
-      this.allReservations = res.data;
+      this.allReservations = res.data.reservas;
       this.loadedMonth = this.getMonthKey(this.currentDate);
     }
 
-    // Si la semana cruza al mes anterior/siguiente, cargar también
     for (const m of required) {
       if (m !== this.loadedMonth) {
         const [y, mo] = m.split('-');
-        const extraRes = await Api.getMonth(`${y}-${mo}-01`);
+        const extraRes = await Api.fullInit(`${y}-${mo}-01`);
         if (extraRes.ok) {
-          this.allReservations = this.allReservations.concat(extraRes.data);
+          this.allReservations = this.allReservations.concat(extraRes.data.reservas);
         }
       }
     }
@@ -339,7 +433,6 @@ const Calendar = {
 
   filterReservationsForView() {
     const dateStr = this.formatDate(this.currentDate);
-
     if (this.viewMode === 'day') {
       this.reservations = this.allReservations.filter(r => r.Fecha === dateStr);
     } else if (this.viewMode === 'week') {
@@ -359,9 +452,12 @@ const Calendar = {
   async loadAndRender() {
     await this.ensureMonthLoaded();
     this.filterReservationsForView();
+    this.renderCurrentView();
+  },
 
-    const dateStr = this.formatDate(this.currentDate);
+  // ── Render ────────────────────────────────────────────
 
+  renderCurrentView() {
     if (this.viewMode === 'day') {
       document.getElementById('current-date').textContent = this.formatDisplayDate(this.currentDate);
       this.renderDayGrid();
@@ -376,33 +472,44 @@ const Calendar = {
       document.getElementById('current-date').textContent = this.formatMonthYear(this.currentDate);
       this.renderMonthGrid();
     }
-
     this.updateSelectionUI();
   },
 
   renderOccupiedCell(reserva, userEmail) {
     const isMine = String(reserva.Email).trim().toLowerCase() === userEmail.trim().toLowerCase();
     const cls = isMine ? 'cell-mine' : 'cell-occupied';
-    const clickAttr = isMine
-      ? `onclick="App.openCancelModal('${reserva.ID}')" style="cursor:pointer"`
-      : '';
-    const tip = isMine
-      ? `${reserva.Actividad || 'Reservado'} — Click para cancelar`
-      : `${reserva.Nombre} — ${reserva.Actividad || 'Sin actividad'}`;
-    return `<td class="calendar-cell ${cls}" title="${tip}" ${clickAttr}>
+
+    if (isMine) {
+      const salaInfo = this.salas.find(l => String(l.ID) === String(reserva.SalaID));
+      const salaName = salaInfo ? salaInfo.Nombre : 'Sala ' + reserva.SalaID;
+      const blockInfo = this.bloques.find(b => String(b.ID) === String(reserva.BloqueID));
+      const bloqueLabel = blockInfo ? blockInfo.Etiqueta : 'Bloque ' + reserva.BloqueID;
+      const cancelSel = this.isCancelSelected(String(reserva.ID)) ? 'cell-cancel-selected' : '';
+      return `<td class="calendar-cell ${cls} ${cancelSel}"
+        data-cancel-sel="${reserva.ID}"
+        title="${reserva.Actividad || 'Reservado'} — Click para cancelar"
+        onclick="Calendar.toggleCancelCell('${reserva.ID}', '${String(reserva.SalaID)}', '${salaName.replace(/'/g, "\\'")}', '${reserva.Fecha}', '${String(reserva.BloqueID)}', '${bloqueLabel.replace(/'/g, "\\'")}')"
+        style="cursor:pointer">
+        <small><strong>${reserva.Actividad || 'Reservado'}</strong><br>${reserva.Nombre}</small>
+      </td>`;
+    }
+
+    return `<td class="calendar-cell ${cls}" title="${reserva.Nombre} — ${reserva.Actividad || 'Sin actividad'}">
       <small><strong>${reserva.Actividad || 'Reservado'}</strong><br>${reserva.Nombre}</small>
     </td>`;
   },
 
-  renderFreeCell(labId, labName, dateStr, blockId, blockLabel, blockIndex) {
-    const sel = this.isSelected(String(labId), dateStr, String(blockId));
+  renderFreeCell(salaId, salaName, dateStr, blockId, blockLabel, blockIndex) {
+    const sel = this.isSelected(String(salaId), dateStr, String(blockId));
     return `<td class="calendar-cell cell-free ${sel ? 'cell-selected' : ''}"
-      data-sel="${labId}-${dateStr}-${blockId}"
-      onclick="Calendar.toggleCell('${labId}', '${labName}', '${dateStr}', '${blockId}', '${blockLabel}', ${blockIndex}, event)"
+      data-sel="${salaId}-${dateStr}-${blockId}"
+      onclick="Calendar.toggleCell('${salaId}', '${salaName.replace(/'/g, "\\'")}', '${dateStr}', '${blockId}', '${blockLabel.replace(/'/g, "\\'")}', ${blockIndex}, event)"
       title="Click para seleccionar (Shift+click para rango)">
       <small class="text-success">Libre</small>
     </td>`;
   },
+
+  // ── Day View ──────────────────────────────────────────
 
   renderDayGrid() {
     const container = document.getElementById('calendar-grid');
@@ -410,22 +517,22 @@ const Calendar = {
     const dateStr = this.formatDate(this.currentDate);
 
     let html = '<div class="table-responsive"><table class="table table-bordered calendar-table">';
-    html += '<thead><tr><th class="lab-header">Laboratorio</th>';
-    this.blocks.forEach(b => {
+    html += '<thead><tr><th class="sala-header">Sala</th>';
+    this.bloques.forEach(b => {
       html += `<th class="text-center">${b.Etiqueta}</th>`;
     });
     html += '</tr></thead><tbody>';
 
-    this.labs.forEach(lab => {
-      html += `<tr><td class="lab-header"><strong>${lab.Nombre}</strong><br><small class="text-muted">Cap: ${lab.Capacidad} | ${lab.Ubicacion}</small></td>`;
-      this.blocks.forEach((block, idx) => {
+    this.salas.forEach(sala => {
+      html += `<tr><td class="sala-header"><strong>${sala.Nombre}</strong><br><small class="text-muted">Cap: ${sala.Capacidad}</small></td>`;
+      this.bloques.forEach((block, idx) => {
         const reserva = this.reservations.find(r =>
-          String(r.LabID) === String(lab.ID) && String(r.BloqueID) === String(block.ID)
+          String(r.SalaID) === String(sala.ID) && String(r.BloqueID) === String(block.ID)
         );
         if (reserva) {
           html += this.renderOccupiedCell(reserva, userEmail);
         } else {
-          html += this.renderFreeCell(lab.ID, lab.Nombre, dateStr, block.ID, block.Etiqueta, idx);
+          html += this.renderFreeCell(sala.ID, sala.Nombre, dateStr, block.ID, block.Etiqueta, idx);
         }
       });
       html += '</tr>';
@@ -435,6 +542,8 @@ const Calendar = {
     container.innerHTML = html;
   },
 
+  // ── Week View ─────────────────────────────────────────
+
   renderWeekGrid() {
     const container = document.getElementById('calendar-grid');
     const userEmail = App.currentUser?.Email || '';
@@ -442,8 +551,8 @@ const Calendar = {
     const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
     let html = '';
-    this.labs.forEach(lab => {
-      html += `<h5 class="mt-4 mb-2">${lab.Nombre} <small class="text-muted">(${lab.Ubicacion}, Cap: ${lab.Capacidad})</small></h5>`;
+    this.salas.forEach(sala => {
+      html += `<h5 class="mt-4 mb-2">${sala.Nombre} <small class="text-muted">(Cap: ${sala.Capacidad})</small></h5>`;
       html += '<div class="table-responsive"><table class="table table-bordered table-sm calendar-table">';
       html += '<thead><tr><th></th>';
       for (let d = 0; d < 7; d++) {
@@ -453,7 +562,7 @@ const Calendar = {
       }
       html += '</tr></thead><tbody>';
 
-      this.blocks.forEach((block, idx) => {
+      this.bloques.forEach((block, idx) => {
         html += `<tr><td class="text-nowrap"><small>${block.Etiqueta}</small></td>`;
         for (let d = 0; d < 7; d++) {
           const date = new Date(monday);
@@ -461,7 +570,7 @@ const Calendar = {
           const dateStr = this.formatDate(date);
 
           const reserva = this.reservations.find(r =>
-            String(r.LabID) === String(lab.ID) &&
+            String(r.SalaID) === String(sala.ID) &&
             String(r.BloqueID) === String(block.ID) &&
             r.Fecha === dateStr
           );
@@ -469,7 +578,7 @@ const Calendar = {
           if (reserva) {
             html += this.renderOccupiedCell(reserva, userEmail);
           } else {
-            html += this.renderFreeCell(lab.ID, lab.Nombre, dateStr, block.ID, block.Etiqueta, idx);
+            html += this.renderFreeCell(sala.ID, sala.Nombre, dateStr, block.ID, block.Etiqueta, idx);
           }
         }
         html += '</tr>';
@@ -481,6 +590,8 @@ const Calendar = {
     container.innerHTML = html;
   },
 
+  // ── Month View ────────────────────────────────────────
+
   renderMonthGrid() {
     const container = document.getElementById('calendar-grid');
     const userEmail = App.currentUser?.Email || '';
@@ -488,44 +599,42 @@ const Calendar = {
     const month = this.currentDate.getMonth();
     const lastDay = new Date(year, month + 1, 0);
     const totalDays = lastDay.getDate();
-    const totalBlocks = this.blocks.length;
+    const totalBlocks = this.bloques.length;
 
     const dayStats = {};
     this.reservations.forEach(r => {
       const key = r.Fecha;
       if (!dayStats[key]) dayStats[key] = {};
-      if (!dayStats[key][r.LabID]) dayStats[key][r.LabID] = { occupied: 0, mine: 0 };
-      dayStats[key][r.LabID].occupied++;
+      if (!dayStats[key][r.SalaID]) dayStats[key][r.SalaID] = { occupied: 0, mine: 0 };
+      dayStats[key][r.SalaID].occupied++;
       if (String(r.Email).trim().toLowerCase() === userEmail.trim().toLowerCase())
-        dayStats[key][r.LabID].mine++;
+        dayStats[key][r.SalaID].mine++;
     });
 
+    // Lab filter
     let html = `<div class="mb-3">
-      <label class="form-label fw-bold">Laboratorio:</label>
-      <select id="month-lab-filter" class="form-select form-select-sm d-inline-block" style="width:auto"
+      <label class="form-label fw-bold">Sala:</label>
+      <select id="month-sala-filter" class="form-select form-select-sm d-inline-block" style="width:auto"
         onchange="Calendar.renderMonthGrid()">
-        <option value="">Todos los laboratorios</option>`;
-    this.labs.forEach(lab => {
-      html += `<option value="${lab.ID}">${lab.Nombre}</option>`;
+        <option value="">Todas las salas</option>`;
+    this.salas.forEach(sala => {
+      html += `<option value="${sala.ID}">${sala.Nombre}</option>`;
     });
     html += '</select></div>';
 
-    const selectedLab = document.getElementById('month-lab-filter')?.value || '';
+    const selectedSala = document.getElementById('month-sala-filter')?.value || '';
 
-    if (selectedLab) {
-      html += this.renderMonthDetailedForLab(selectedLab, year, month, totalDays, userEmail);
+    if (selectedSala) {
+      html += this.renderMonthDetailedForSala(selectedSala, year, month, totalDays, userEmail);
     } else {
-      html += this.renderMonthOverview(year, month, totalDays, totalBlocks, dayStats, userEmail);
+      html += this.renderMonthOverview(year, month, totalDays, totalBlocks, dayStats);
     }
 
     container.innerHTML = html;
-
-    if (selectedLab) {
-      document.getElementById('month-lab-filter').value = selectedLab;
-    }
+    if (selectedSala) document.getElementById('month-sala-filter').value = selectedSala;
   },
 
-  renderMonthOverview(year, month, totalDays, totalBlocks, dayStats, userEmail) {
+  renderMonthOverview(year, month, totalDays, totalBlocks, dayStats) {
     const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
     const firstDay = new Date(year, month, 1);
     const startOffset = (firstDay.getDay() + 6) % 7;
@@ -546,17 +655,17 @@ const Calendar = {
       const stats = dayStats[dateStr] || {};
 
       html += `<td class="month-cell ${isToday ? 'month-cell-today' : ''}"
-        onclick="Calendar.goToDay('${dateStr}')">
+        onclick="Calendar.goToDay('${dateStr}')" title="Click para ver día">
         <div class="month-day-number">${day}</div>
         <div class="month-day-content">`;
 
-      this.labs.forEach(lab => {
-        const s = stats[lab.ID];
+      this.salas.forEach(sala => {
+        const s = stats[sala.ID];
         if (s) {
           const pct = Math.round((s.occupied / totalBlocks) * 100);
           const barClass = pct >= 80 ? 'bg-danger' : pct >= 40 ? 'bg-warning' : 'bg-success';
-          html += `<div class="month-lab-row" title="${lab.Nombre}: ${s.occupied}/${totalBlocks} bloques ocupados${s.mine ? ' (' + s.mine + ' tuyas)' : ''}">
-            <small class="month-lab-name">${lab.Nombre.replace('Laboratorio de ', '')}</small>
+          html += `<div class="month-lab-row" title="${sala.Nombre}: ${s.occupied}/${totalBlocks} bloques">
+            <small class="month-lab-name">${sala.Nombre.substring(0, 8)}</small>
             <div class="progress month-progress">
               <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
             </div>
@@ -565,32 +674,26 @@ const Calendar = {
       });
 
       html += '</div></td>';
-
-      const cellIndex = startOffset + day;
-      if (cellIndex % 7 === 0 && day < totalDays) {
-        html += '</tr><tr>';
-      }
+      if ((startOffset + day) % 7 === 0 && day < totalDays) html += '</tr><tr>';
     }
 
     const remaining = (startOffset + totalDays) % 7;
     if (remaining > 0) {
-      for (let i = remaining; i < 7; i++) {
-        html += '<td class="month-cell month-cell-empty"></td>';
-      }
+      for (let i = remaining; i < 7; i++) html += '<td class="month-cell month-cell-empty"></td>';
     }
 
     html += '</tr></tbody></table></div>';
     return html;
   },
 
-  renderMonthDetailedForLab(labId, year, month, totalDays, userEmail) {
-    const lab = this.labs.find(l => String(l.ID) === String(labId));
+  renderMonthDetailedForSala(salaId, year, month, totalDays, userEmail) {
+    const sala = this.salas.find(l => String(l.ID) === String(salaId));
     const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-    let html = `<h5>${lab.Nombre} — Vista detallada del mes</h5>`;
+    let html = `<h5>${sala.Nombre} — Vista detallada del mes</h5>`;
     html += '<div class="table-responsive"><table class="table table-bordered table-sm calendar-table">';
     html += '<thead><tr><th>Día</th>';
-    this.blocks.forEach(b => {
+    this.bloques.forEach(b => {
       html += `<th class="text-center"><small>${b.Etiqueta}</small></th>`;
     });
     html += '</tr></thead><tbody>';
@@ -605,17 +708,16 @@ const Calendar = {
       html += `<tr class="${isToday ? 'table-info' : ''} ${isWeekend ? 'table-light' : ''}">`;
       html += `<td class="text-nowrap"><strong>${dayNames[dayOfWeek]} ${day}</strong></td>`;
 
-      this.blocks.forEach((block, idx) => {
+      this.bloques.forEach((block, idx) => {
         const reserva = this.reservations.find(r =>
-          String(r.LabID) === String(labId) &&
+          String(r.SalaID) === String(salaId) &&
           String(r.BloqueID) === String(block.ID) &&
           r.Fecha === dateStr
         );
-
         if (reserva) {
           html += this.renderOccupiedCell(reserva, userEmail);
         } else {
-          html += this.renderFreeCell(lab.ID, lab.Nombre, dateStr, block.ID, block.Etiqueta, idx);
+          html += this.renderFreeCell(sala.ID, sala.Nombre, dateStr, block.ID, block.Etiqueta, idx);
         }
       });
 
@@ -629,6 +731,10 @@ const Calendar = {
   goToDay(dateStr) {
     this.currentDate = new Date(dateStr + 'T12:00:00');
     document.getElementById('date-picker').value = dateStr;
-    this.setViewMode('day');
+    this.viewMode = 'day';
+    document.querySelectorAll('.btn-view-mode').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('btn-view-day').classList.add('active');
+    this.filterReservationsForView();
+    this.renderCurrentView();
   }
 };
