@@ -254,16 +254,19 @@ small { font-size: 0.8125em; }
   margin-left: 0.25rem;
 }
 
-/* ── Calendar Grid ───────────────────────────────────── */
+/* ── Calendar & Month Table Headers (unified) ────────── */
 
-.calendar-table {
+.calendar-table,
+.month-table {
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.8125rem;
 }
 
-.calendar-table th {
+.calendar-table { font-size: 0.8125rem; }
+
+.calendar-table th,
+.month-table th {
   font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -275,7 +278,8 @@ small { font-size: 0.8125em; }
   padding: 0.5rem;
 }
 
-.calendar-table td {
+.calendar-table td,
+.month-table td {
   border-color: var(--color-border-light);
 }
 
@@ -323,7 +327,11 @@ small { font-size: 0.8125em; }
 #calendar-grid h5 { font-size: 0.9375rem; font-weight: 600; }
 #calendar-grid h5 small { font-weight: 400; color: var(--color-text-muted); }
 
-/* ── Selection States ────────────────────────────────── */
+/* ── Selection States (unified base) ────────────────── */
+
+.cell-highlight {
+  box-shadow: inset 0 0 0 1px;
+}
 
 .cell-selected {
   background-color: var(--color-selected) !important;
@@ -374,25 +382,6 @@ small { font-size: 0.8125em; }
 }
 
 /* ── Month View ──────────────────────────────────────── */
-
-.month-table {
-  table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.month-table th {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-secondary);
-  background: var(--color-bg);
-  border-color: var(--color-border-light);
-  padding: 0.5rem;
-}
-
-.month-table td { border-color: var(--color-border-light); }
 
 .month-cell {
   vertical-align: top;

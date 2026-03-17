@@ -5,6 +5,8 @@
 
 const App = {
   currentUser: null,
+  _modalReservar: null,
+  _modalCancelar: null,
 
   async init() {
     document.querySelectorAll('[data-nav]').forEach(el => {
@@ -25,6 +27,12 @@ const App = {
       document.getElementById('login-email').value = savedEmail;
       await this.login(true);
     }
+  },
+
+  // ── Email helper ───────────────────────────────────────
+
+  isMyEmail(email) {
+    return String(email).trim().toLowerCase() === this.currentUser?.Email?.trim().toLowerCase();
   },
 
   // ── Autenticación ─────────────────────────────────────
@@ -69,6 +77,11 @@ const App = {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-container').classList.remove('d-none');
     document.getElementById('user-display').textContent = this.currentUser.Nombre;
+
+    // Cache modal instances
+    this._modalReservar = new bootstrap.Modal(document.getElementById('reservationModal'));
+    this._modalCancelar = new bootstrap.Modal(document.getElementById('cancelModal'));
+
     this.showView('calendario');
     Calendar.init();
   },
@@ -78,6 +91,8 @@ const App = {
     localStorage.removeItem('sjo_email');
     localStorage.removeItem('sjo_nombre');
     Calendar.stopAutoRefresh();
+    this._modalReservar = null;
+    this._modalCancelar = null;
     document.getElementById('login-screen').style.display = '';
     document.getElementById('app-container').classList.add('d-none');
   },
@@ -96,7 +111,6 @@ const App = {
   // ── Modal de Reserva ──────────────────────────────────
 
   openMultiReservation(selections) {
-    const modal = new bootstrap.Modal(document.getElementById('reservationModal'));
     this._reservationSelections = selections;
 
     // Summary
@@ -122,7 +136,7 @@ const App = {
     until.setDate(until.getDate() + 21);
     document.getElementById('res-recurrence-until').value = Calendar.formatDate(until);
 
-    modal.show();
+    this._modalReservar.show();
   },
 
   toggleResRecurrence() {
@@ -174,7 +188,7 @@ const App = {
 
       if (res.ok) {
         this.showToast(`Reserva confirmada (${allSlots.length} bloque${allSlots.length > 1 ? 's' : ''})`, 'success');
-        bootstrap.Modal.getInstance(document.getElementById('reservationModal')).hide();
+        this._modalReservar.hide();
         Calendar.clearSelection();
         Calendar.invalidateCache();
         Calendar.loadAndRender();
@@ -193,16 +207,15 @@ const App = {
 
   openBulkCancel() {
     if (Calendar.cancelSelection.length === 0) return;
-    const modal = new bootstrap.Modal(document.getElementById('cancelModal'));
     this._cancelItems = Calendar.cancelSelection.slice();
 
-    let html = '<p>¿Cancelar estas reservas?</p><ul>';
+    const h = ['<p>¿Cancelar estas reservas?</p><ul>'];
     this._cancelItems.forEach(s => {
-      html += `<li><strong>${s.salaName}</strong> — ${s.fecha} — ${s.bloqueLabel}</li>`;
+      h.push(`<li><strong>${s.salaName}</strong> — ${s.fecha} — ${s.bloqueLabel}</li>`);
     });
-    html += '</ul>';
-    document.getElementById('cancel-modal-body').innerHTML = html;
-    modal.show();
+    h.push('</ul>');
+    document.getElementById('cancel-modal-body').innerHTML = h.join('');
+    this._modalCancelar.show();
   },
 
   async confirmCancel() {
@@ -223,7 +236,7 @@ const App = {
         this.showToast(`Errores: ${errors.join(', ')}`, 'error');
       }
 
-      bootstrap.Modal.getInstance(document.getElementById('cancelModal')).hide();
+      this._modalCancelar.hide();
       Calendar.clearCancelSelection();
       Calendar.invalidateCache();
       Calendar.loadAndRender();
@@ -237,80 +250,72 @@ const App = {
 
   // ── Mis Reservas ──────────────────────────────────────
 
-  async loadMyReservations() {
+  loadMyReservations() {
     const container = document.getElementById('my-reservations-list');
-    container.innerHTML = '<div class="text-center py-3"><div class="spinner-border"></div></div>';
     document.getElementById('my-email-display').textContent = '(' + this.currentUser.Email + ')';
 
-    try {
-      const today = Calendar.formatDate(new Date());
-      const res = await Api.getMonth(today);
-      if (!res.ok) { container.innerHTML = '<p>Error al cargar</p>'; return; }
+    const today = Calendar.formatDate(new Date());
+    const mine = Calendar.allReservations
+      .filter(r => this.isMyEmail(r.Email) && r.Fecha >= today)
+      .sort((a, b) => (a.Fecha > b.Fecha ? 1 : -1));
 
-      const mine = res.data.filter(r =>
-        String(r.Email).trim().toLowerCase() === this.currentUser.Email.trim().toLowerCase()
-      ).sort((a, b) => (a.Fecha > b.Fecha ? 1 : -1));
-
-      if (mine.length === 0) {
-        container.innerHTML = '<p class="text-muted">No tienes reservas este mes.</p>';
-        return;
-      }
-
-      // Group by recurrence
-      const groups = {};
-      const singles = [];
-      mine.forEach(r => {
-        if (r.Recurrencia) {
-          if (!groups[r.Recurrencia]) groups[r.Recurrencia] = [];
-          groups[r.Recurrencia].push(r);
-        } else {
-          singles.push(r);
-        }
-      });
-
-      let html = '';
-
-      // Recurring groups
-      Object.entries(groups).forEach(([groupId, reservas]) => {
-        const sala = Calendar.salas.find(l => String(l.ID) === String(reservas[0].SalaID));
-        html += `<div class="card mb-3">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <div>
-                <span class="badge bg-primary">Recurrente (${reservas.length} bloques)</span>
-                <h6 class="mt-1 mb-0">${sala?.Nombre || 'Sala'} — ${reservas[0].Actividad}</h6>
-              </div>
-              <button class="btn btn-outline-danger btn-sm" onclick="App.cancelRecurrenceGroup('${groupId}')">Cancelar grupo</button>
-            </div>
-            <ul class="mb-0" style="font-size:0.8125rem">
-              ${reservas.map(r => {
-                const bl = Calendar.bloques.find(b => String(b.ID) === String(r.BloqueID));
-                return `<li>${r.Fecha} — ${bl?.Etiqueta || ''}</li>`;
-              }).join('')}
-            </ul>
-          </div>
-        </div>`;
-      });
-
-      // Singles
-      singles.forEach(r => {
-        const sala = Calendar.salas.find(l => String(l.ID) === String(r.SalaID));
-        const bl = Calendar.bloques.find(b => String(b.ID) === String(r.BloqueID));
-        html += `<div class="card mb-2">
-          <div class="card-body d-flex justify-content-between align-items-center">
-            <div>
-              <strong>${sala?.Nombre || 'Sala'}</strong> — ${r.Fecha} — ${bl?.Etiqueta || ''}
-              <br><small class="text-muted">${r.Actividad}</small>
-            </div>
-            <button class="btn btn-outline-danger btn-sm" onclick="App.cancelSingle(${r.ID})">Cancelar</button>
-          </div>
-        </div>`;
-      });
-
-      container.innerHTML = html;
-    } catch (e) {
-      container.innerHTML = '<p>Error de conexión</p>';
+    if (mine.length === 0) {
+      container.innerHTML = '<p class="text-muted">No tienes próximas reservas.</p>';
+      return;
     }
+
+    // Group by recurrence
+    const groups = {};
+    const singles = [];
+    mine.forEach(r => {
+      if (r.Recurrencia) {
+        if (!groups[r.Recurrencia]) groups[r.Recurrencia] = [];
+        groups[r.Recurrencia].push(r);
+      } else {
+        singles.push(r);
+      }
+    });
+
+    const h = [];
+
+    // Recurring groups
+    Object.entries(groups).forEach(([groupId, reservas]) => {
+      const sala = Calendar.salas.find(l => l.ID === reservas[0].SalaID);
+      h.push(`<div class="card mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <span class="badge bg-primary">Recurrente (${reservas.length} bloques)</span>
+              <h6 class="mt-1 mb-0">${sala?.Nombre || 'Sala'} — ${reservas[0].Actividad}</h6>
+            </div>
+            <button class="btn btn-outline-danger btn-sm" onclick="App.cancelRecurrenceGroup('${groupId}')">Cancelar grupo</button>
+          </div>
+          <ul class="mb-0" style="font-size:0.8125rem">
+            ${reservas.map(r => {
+              const bl = Calendar.bloques.find(b => b.ID === r.BloqueID);
+              return `<li>${r.Fecha} — ${bl?.Etiqueta || ''}</li>`;
+            }).join('')}
+          </ul>
+        </div>
+      </div>`);
+    });
+
+    // Singles
+    singles.forEach(r => {
+      const sala = Calendar.salas.find(l => l.ID === r.SalaID);
+      const bl = Calendar.bloques.find(b => b.ID === r.BloqueID);
+      h.push(`<div class="card mb-2">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <div>
+            <strong>${sala?.Nombre || 'Sala'}</strong> — ${r.Fecha} — ${bl?.Etiqueta || ''}
+            <br><small class="text-muted">${r.Actividad}</small>
+          </div>
+          <button class="btn btn-outline-danger btn-sm" onclick="App.cancelSingle(${r.ID})">Cancelar</button>
+        </div>
+      </div>`);
+    });
+
+    container.innerHTML = h.join('');
   },
 
   async cancelSingle(id) {

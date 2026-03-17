@@ -74,7 +74,11 @@ function getCached(key, ttlSeconds, fetchFn) {
 
 function invalidateCache() {
   const cache = CacheService.getScriptCache();
-  cache.removeAll(['data_salas', 'data_bloques', 'data_usuarios']);
+  const now = new Date();
+  const year = now.getFullYear();
+  const keys = ['data_salas', 'data_bloques', 'data_usuarios',
+                'year_compact_' + year, 'year_compact_' + (year + 1)];
+  cache.removeAll(keys);
 }
 
 // ── Validación de usuario ───────────────────────────────────
@@ -86,51 +90,84 @@ function validateUser(email) {
   return users.find(u => String(u.Email).trim().toLowerCase() === normalized) || null;
 }
 
-// ── Lecturas de reservas ────────────────────────────────────
+// ── Year Compact ────────────────────────────────────────────
 
-function getReservationsForMonth(fechaStr) {
-  const base = new Date(fechaStr + 'T00:00:00');
-  const firstStr = formatDate(new Date(base.getFullYear(), base.getMonth(), 1));
-  const lastStr = formatDate(new Date(base.getFullYear(), base.getMonth() + 1, 0));
+function getYearCompact(year) {
+  const yearNum = Number(year);
+  const cacheKey = 'year_compact_' + yearNum;
+  return getCached(cacheKey, 60, () => buildYearCompact(yearNum));
+}
 
+function buildYearCompact(year) {
   const sheet = getSheet(SHEET_RESERVAS);
   const all = sheetToObjects(sheet);
-  return all.filter(r => {
+
+  const firstStr = year + '-01-01';
+  const lastStr = year + '-12-31';
+
+  const yearReservations = all.filter(r => {
     const f = formatDate(r.Fecha);
     return f >= firstStr && f <= lastStr;
-  }).map(r => ({
-    ...r,
-    Fecha: formatDate(r.Fecha),
-    FechaCreacion: r.FechaCreacion ? formatDate(r.FechaCreacion) : ''
-  }));
-}
+  });
 
-function getReservationsForDate(fecha) {
-  const sheet = getSheet(SHEET_RESERVAS);
-  const all = sheetToObjects(sheet);
-  return all.filter(r => formatDate(r.Fecha) === fecha).map(r => ({
-    ...r,
-    Fecha: formatDate(r.Fecha)
-  }));
-}
+  // Build lookup tables
+  const userMap = new Map();
+  const actMap = new Map();
+  const groupMap = new Map();
+  const users = [];
+  const activities = [];
+  const groups = [];
 
-function getReservationsForWeek(fechaStr) {
-  const base = new Date(fechaStr + 'T00:00:00');
-  const day = base.getDay();
-  const monday = new Date(base);
-  monday.setDate(base.getDate() - ((day + 6) % 7));
-  const dates = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    dates.push(formatDate(d));
-  }
-  const sheet = getSheet(SHEET_RESERVAS);
-  const all = sheetToObjects(sheet);
-  return all.filter(r => dates.includes(formatDate(r.Fecha))).map(r => ({
-    ...r,
-    Fecha: formatDate(r.Fecha)
-  }));
+  yearReservations.forEach(r => {
+    const email = String(r.Email || '').trim().toLowerCase();
+    const nombre = String(r.Nombre || '');
+    const userKey = email;
+    if (!userMap.has(userKey)) {
+      userMap.set(userKey, users.length);
+      users.push([email, nombre]);
+    }
+
+    const act = String(r.Actividad || '');
+    if (!actMap.has(act)) {
+      actMap.set(act, activities.length);
+      activities.push(act);
+    }
+
+    const rec = String(r.Recurrencia || '');
+    if (rec && !groupMap.has(rec)) {
+      groupMap.set(rec, groups.length);
+      groups.push(rec);
+    }
+  });
+
+  // Build compact records
+  const records = yearReservations.map(r => {
+    const fecha = r.Fecha instanceof Date ? r.Fecha : new Date(formatDate(r.Fecha) + 'T00:00:00');
+    const startOfYear = new Date(year, 0, 1);
+    const doy = Math.floor((fecha - startOfYear) / 86400000) + 1;
+
+    const email = String(r.Email || '').trim().toLowerCase();
+    const act = String(r.Actividad || '');
+    const rec = String(r.Recurrencia || '');
+
+    return [
+      Number(r.ID),
+      Number(r.SalaID),
+      doy,
+      Number(r.BloqueID),
+      userMap.get(email),
+      actMap.get(act),
+      rec ? groupMap.get(rec) : -1
+    ];
+  });
+
+  return {
+    y: year,
+    u: users,
+    a: activities,
+    g: groups,
+    r: records
+  };
 }
 
 // ── Web App Entry Points ────────────────────────────────────
@@ -141,11 +178,9 @@ function doGet(e) {
   try {
     switch (action) {
       case 'fullInit': {
-        const fecha = e.parameter.fecha;
         const salas = getCached('data_salas', 600, () => sheetToObjects(getSheet(SHEET_SALAS)));
         const bloques = getCached('data_bloques', 600, () => processBlocks(sheetToObjects(getSheet(SHEET_BLOQUES))));
-        const reservas = fecha ? getReservationsForMonth(fecha) : [];
-        return jsonResponse({ ok: true, data: { salas, bloques, reservas } });
+        return jsonResponse({ ok: true, data: { salas, bloques } });
       }
 
       case 'login': {
@@ -156,22 +191,10 @@ function doGet(e) {
         return jsonResponse({ ok: true, data: user });
       }
 
-      case 'getReservations': {
-        const fecha = e.parameter.fecha;
-        if (!fecha) return jsonResponse({ ok: false, error: 'Falta parámetro fecha' });
-        return jsonResponse({ ok: true, data: getReservationsForDate(fecha) });
-      }
-
-      case 'getWeek': {
-        const fecha = e.parameter.fecha;
-        if (!fecha) return jsonResponse({ ok: false, error: 'Falta parámetro fecha' });
-        return jsonResponse({ ok: true, data: getReservationsForWeek(fecha) });
-      }
-
-      case 'getMonth': {
-        const fecha = e.parameter.fecha;
-        if (!fecha) return jsonResponse({ ok: false, error: 'Falta parámetro fecha' });
-        return jsonResponse({ ok: true, data: getReservationsForMonth(fecha) });
+      case 'getYearCompact': {
+        const year = e.parameter.year;
+        if (!year) return jsonResponse({ ok: false, error: 'Falta parámetro year' });
+        return jsonResponse({ ok: true, data: getYearCompact(year) });
       }
 
       default:
@@ -206,7 +229,6 @@ function doPost(e) {
 
 function createReservation(body) {
   const { slots, email, actividad, recurrenciaGrupo } = body;
-  // slots = [{ salaId, fecha, bloqueId }, ...]
 
   if (!slots || !slots.length || !email)
     return { ok: false, error: 'Faltan campos obligatorios' };
@@ -229,6 +251,10 @@ function createReservation(body) {
     const resSheet = getSheet(SHEET_RESERVAS);
     const existentes = sheetToObjects(resSheet);
 
+    // Cache salas/bloques once
+    const salas = getCached('data_salas', 600, () => sheetToObjects(getSheet(SHEET_SALAS)));
+    const bloques = getCached('data_bloques', 600, () => processBlocks(sheetToObjects(getSheet(SHEET_BLOQUES))));
+
     // Verificar que ningún slot esté ocupado
     for (const s of slots) {
       const ocupado = existentes.some(r =>
@@ -237,7 +263,6 @@ function createReservation(body) {
         String(r.BloqueID) === String(s.bloqueId)
       );
       if (ocupado) {
-        const bloques = getCached('data_bloques', 600, () => processBlocks(sheetToObjects(getSheet(SHEET_BLOQUES))));
         const bloque = bloques.find(b => String(b.ID) === String(s.bloqueId));
         return { ok: false, error: 'Ya reservado: ' + s.fecha + ' ' + (bloque ? bloque.Etiqueta : 'Bloque ' + s.bloqueId) };
       }
@@ -261,23 +286,7 @@ function createReservation(body) {
     const lastRow = resSheet.getLastRow();
     resSheet.getRange(lastRow + 1, 1, rows.length, 9).setValues(rows);
 
-    // Datos para email
-    const salas = getCached('data_salas', 600, () => sheetToObjects(getSheet(SHEET_SALAS)));
-    const bloques = getCached('data_bloques', 600, () => processBlocks(sheetToObjects(getSheet(SHEET_BLOQUES))));
-
-    emailData = {
-      slots: slots.map(s => {
-        const sala = salas.find(l => String(l.ID) === String(s.salaId));
-        const bloque = bloques.find(b => String(b.ID) === String(s.bloqueId));
-        return {
-          sala: sala ? sala.Nombre : 'Sala ' + s.salaId,
-          fecha: s.fecha,
-          bloque: bloque ? bloque.Etiqueta : 'Bloque ' + s.bloqueId
-        };
-      }),
-      actividad
-    };
-
+    emailData = buildEmailData(slots, salas, bloques, actividad);
     result = { ok: true, data: { ids: createdIds, count: createdIds.length } };
   } finally {
     lock.releaseLock();
@@ -289,6 +298,21 @@ function createReservation(body) {
   }
 
   return result;
+}
+
+function buildEmailData(slots, salas, bloques, actividad) {
+  return {
+    slots: slots.map(s => {
+      const sala = salas.find(l => String(l.ID) === String(s.salaId));
+      const bloque = bloques.find(b => String(b.ID) === String(s.bloqueId));
+      return {
+        sala: sala ? sala.Nombre : 'Sala ' + s.salaId,
+        fecha: s.fecha,
+        bloque: bloque ? bloque.Etiqueta : 'Bloque ' + s.bloqueId
+      };
+    }),
+    actividad
+  };
 }
 
 // ── Cancelar reserva ────────────────────────────────────────
@@ -395,25 +419,27 @@ function cancelRecurrenceGroup(body) {
 
 // ── Emails ──────────────────────────────────────────────────
 
-function sendConfirmationEmail(email, nombre, data) {
-  const slotsHtml = data.slots.map(s =>
-    '<tr><td style="padding:6px 10px;border:1px solid #dee2e6">' + s.sala + '</td>' +
-    '<td style="padding:6px 10px;border:1px solid #dee2e6">' + s.fecha + '</td>' +
-    '<td style="padding:6px 10px;border:1px solid #dee2e6">' + s.bloque + '</td></tr>'
-  ).join('');
-
-  const html = '<div style="font-family:Arial,sans-serif;max-width:600px">' +
-    '<h2 style="color:#059669">Reserva Confirmada</h2>' +
+function buildEmailHtml(title, color, nombre, tableRows) {
+  const cellStyle = 'padding:6px 10px;border:1px solid #dee2e6';
+  return '<div style="font-family:Arial,sans-serif;max-width:600px">' +
+    '<h2 style="color:' + color + '">' + title + '</h2>' +
     '<p>Hola <strong>' + nombre + '</strong>,</p>' +
-    '<p>Tu reserva ha sido registrada:</p>' +
-    '<p><strong>Actividad:</strong> ' + (data.actividad || '-') + '</p>' +
     '<table style="border-collapse:collapse;width:100%">' +
-    '<tr style="background:#f8fafc"><th style="padding:6px 10px;border:1px solid #dee2e6;text-align:left">Sala</th>' +
-    '<th style="padding:6px 10px;border:1px solid #dee2e6;text-align:left">Fecha</th>' +
-    '<th style="padding:6px 10px;border:1px solid #dee2e6;text-align:left">Bloque</th></tr>' +
-    slotsHtml +
+    tableRows.map(r =>
+      '<tr>' + r.map(c => '<td style="' + cellStyle + '">' + c + '</td>').join('') + '</tr>'
+    ).join('') +
     '</table>' +
     '<hr><p style="color:#6c757d;font-size:12px">Sistema de Reserva de Salas – SJO</p></div>';
+}
+
+function sendConfirmationEmail(email, nombre, data) {
+  const headerRow = ['<strong>Sala</strong>', '<strong>Fecha</strong>', '<strong>Bloque</strong>'];
+  const rows = [headerRow];
+  data.slots.forEach(s => rows.push([s.sala, s.fecha, s.bloque]));
+
+  const actLine = '<p><strong>Actividad:</strong> ' + (data.actividad || '-') + '</p>';
+  const tableHtml = buildEmailHtml('Reserva Confirmada', '#059669', nombre, rows);
+  const html = tableHtml.replace('</table>', '</table>' + actLine);
 
   MailApp.sendEmail({
     to: email,
@@ -423,21 +449,14 @@ function sendConfirmationEmail(email, nombre, data) {
 }
 
 function sendCancellationEmail(email, nombre, data) {
-  const html = '<div style="font-family:Arial,sans-serif;max-width:600px">' +
-    '<h2 style="color:#dc2626">Reserva Cancelada</h2>' +
-    '<p>Hola <strong>' + nombre + '</strong>,</p>' +
-    '<p>Tu reserva ha sido cancelada:</p>' +
-    '<table style="border-collapse:collapse;width:100%">' +
-    '<tr><td style="padding:6px 10px;border:1px solid #dee2e6"><strong>Sala</strong></td>' +
-        '<td style="padding:6px 10px;border:1px solid #dee2e6">' + data.sala + '</td></tr>' +
-    '<tr><td style="padding:6px 10px;border:1px solid #dee2e6"><strong>Fecha</strong></td>' +
-        '<td style="padding:6px 10px;border:1px solid #dee2e6">' + data.fecha + '</td></tr>' +
-    '<tr><td style="padding:6px 10px;border:1px solid #dee2e6"><strong>Bloque</strong></td>' +
-        '<td style="padding:6px 10px;border:1px solid #dee2e6">' + data.bloque + '</td></tr>' +
-    '<tr><td style="padding:6px 10px;border:1px solid #dee2e6"><strong>Actividad</strong></td>' +
-        '<td style="padding:6px 10px;border:1px solid #dee2e6">' + data.actividad + '</td></tr>' +
-    '</table>' +
-    '<hr><p style="color:#6c757d;font-size:12px">Sistema de Reserva de Salas – SJO</p></div>';
+  const rows = [
+    ['<strong>Sala</strong>', data.sala],
+    ['<strong>Fecha</strong>', data.fecha],
+    ['<strong>Bloque</strong>', data.bloque],
+    ['<strong>Actividad</strong>', data.actividad]
+  ];
+
+  const html = buildEmailHtml('Reserva Cancelada', '#dc2626', nombre, rows);
 
   MailApp.sendEmail({
     to: email,

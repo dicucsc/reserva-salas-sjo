@@ -9,9 +9,10 @@ const Calendar = {
   bloques: [],
   reservations: [],
   allReservations: [],
-  loadedMonth: null,
+  loadedYear: null,
   viewMode: 'day',
   refreshInterval: null,
+  _resMap: new Map(),
 
   // Selección múltiple de celdas libres (para reservar)
   selection: [],
@@ -49,22 +50,29 @@ const Calendar = {
     return date;
   },
 
-  getMonthKey(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  },
-
   // ── Init ────────────────────────────────────────────────
 
   async init() {
-    const fecha = this.formatDate(this.currentDate);
-    const res = await Api.fullInit(fecha);
-    if (res.ok) {
-      this.salas = res.data.salas;
-      this.bloques = res.data.bloques;
-      this.allReservations = res.data.reservas;
-      this.loadedMonth = this.getMonthKey(this.currentDate);
+    const year = this.currentDate.getFullYear();
+
+    const [initRes, compactRes] = await Promise.all([
+      Api.fullInit(),
+      Api.getYearCompact(year)
+    ]);
+
+    if (initRes.ok) {
+      this.salas = initRes.data.salas;
+      this.bloques = initRes.data.bloques;
     }
+
+    if (compactRes.ok) {
+      this.allReservations = this.expandCompact(compactRes.data);
+      this.loadedYear = year;
+    }
+
+    this.buildResMap();
     this.setupNavigation();
+    this.setupEventDelegation();
     this.filterReservationsForView();
     this.renderCurrentView();
     this.startAutoRefresh();
@@ -94,6 +102,46 @@ const Calendar = {
     document.getElementById('btn-view-month').onclick = () => this.setViewMode('month');
   },
 
+  setupEventDelegation() {
+    const container = document.getElementById('calendar-grid');
+    container.addEventListener('click', e => {
+      const freeCell = e.target.closest('[data-sala][data-fecha][data-bloque]:not([data-res-id])');
+      if (freeCell) {
+        const salaId = Number(freeCell.dataset.sala);
+        const fecha = freeCell.dataset.fecha;
+        const bloqueId = Number(freeCell.dataset.bloque);
+        const blockIndex = Number(freeCell.dataset.idx);
+        const sala = this.salas.find(s => s.ID === salaId);
+        const bloque = this.bloques.find(b => b.ID === bloqueId);
+        this.toggleCell(salaId, sala ? sala.Nombre : 'Sala ' + salaId, fecha, bloqueId, bloque ? bloque.Etiqueta : 'Bloque ' + bloqueId, blockIndex, e);
+        return;
+      }
+
+      const mineCell = e.target.closest('[data-res-id]');
+      if (mineCell) {
+        const reservaId = Number(mineCell.dataset.resId);
+        const salaId = Number(mineCell.dataset.sala);
+        const fecha = mineCell.dataset.fecha;
+        const bloqueId = Number(mineCell.dataset.bloque);
+        const sala = this.salas.find(s => s.ID === salaId);
+        const bloque = this.bloques.find(b => b.ID === bloqueId);
+        this.toggleCancelCell(reservaId, salaId, sala ? sala.Nombre : 'Sala ' + salaId, fecha, bloqueId, bloque ? bloque.Etiqueta : 'Bloque ' + bloqueId);
+        return;
+      }
+
+      const monthCell = e.target.closest('[data-goto-day]');
+      if (monthCell) {
+        this.goToDay(monthCell.dataset.gotoDay);
+      }
+    });
+
+    container.addEventListener('change', e => {
+      if (e.target.id === 'month-sala-filter') {
+        this.renderMonthGrid();
+      }
+    });
+  },
+
   setViewMode(mode) {
     this.viewMode = mode;
     document.querySelectorAll('.btn-view-mode').forEach(btn => btn.classList.remove('active'));
@@ -113,13 +161,47 @@ const Calendar = {
     this.loadAndRender();
   },
 
+  // ── Compact data expansion ─────────────────────────────
+
+  expandCompact(c) {
+    return c.r.map(([id, s, doy, b, ui, ai, gi]) => ({
+      ID: id,
+      SalaID: s,
+      Fecha: this.doyToDate(c.y, doy),
+      BloqueID: b,
+      Email: c.u[ui][0],
+      Nombre: c.u[ui][1],
+      Actividad: c.a[ai],
+      Recurrencia: gi < 0 ? '' : c.g[gi]
+    }));
+  },
+
+  doyToDate(y, doy) {
+    const d = new Date(y, 0, doy);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
+
+  // ── Reservation Map (O(1) lookup) ──────────────────────
+
+  buildResMap() {
+    this._resMap = new Map();
+    this.allReservations.forEach(r => {
+      this._resMap.set(`${r.SalaID}-${r.Fecha}-${r.BloqueID}`, r);
+    });
+  },
+
+  getRes(salaId, fecha, bloqueId) {
+    return this._resMap.get(`${salaId}-${fecha}-${bloqueId}`);
+  },
+
   // ── Auto-refresh ──────────────────────────────────────
 
   startAutoRefresh() {
     this.stopAutoRefresh();
     this.refreshInterval = setInterval(async () => {
-      this.invalidateCache();
-      await this.ensureMonthLoaded();
+      this.loadedYear = null;
+      this.allReservations = [];
+      await this.ensureYearLoaded();
       this.filterReservationsForView();
       this.renderCurrentView();
     }, 90000);
@@ -133,8 +215,9 @@ const Calendar = {
   },
 
   invalidateCache() {
-    this.loadedMonth = null;
+    this.loadedYear = null;
     this.allReservations = [];
+    this._resMap = new Map();
   },
 
   // ── Selection (reservar) ──────────────────────────────
@@ -160,11 +243,8 @@ const Calendar = {
       for (let i = from; i <= to; i++) {
         const block = this.bloques[i];
         if (!block) continue;
-        const bId = String(block.ID);
-        const isOccupied = this.allReservations.some(r =>
-          String(r.SalaID) === salaId && String(r.BloqueID) === bId && r.Fecha === fecha
-        );
-        if (!isOccupied && !this.isSelected(salaId, fecha, bId)) {
+        const bId = block.ID;
+        if (!this.getRes(salaId, fecha, bId) && !this.isSelected(salaId, fecha, bId)) {
           this.selection.push({ salaId, salaName, fecha, bloqueId: bId, bloqueLabel: block.Etiqueta });
         }
       }
@@ -211,7 +291,7 @@ const Calendar = {
       });
       const lines = Object.values(groups).map(g => {
         const bloques = g.bloques
-          .sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId))
+          .sort((a, b) => a.bloqueId - b.bloqueId)
           .map(s => s.bloqueLabel).join(', ');
         return `<strong>${g.salaName}</strong> — ${g.fecha} — ${g.bloques.length} bloque(s): ${bloques}`;
       });
@@ -233,7 +313,7 @@ const Calendar = {
       });
       const lines = Object.values(groups).map(g => {
         const bloques = g.bloques
-          .sort((a, b) => Number(a.bloqueId) - Number(b.bloqueId))
+          .sort((a, b) => a.bloqueId - b.bloqueId)
           .map(s => s.bloqueLabel).join(', ');
         return `<strong>${g.salaName}</strong> — ${g.fecha} — ${g.bloques.length} bloque(s): ${bloques}`;
       });
@@ -250,16 +330,16 @@ const Calendar = {
 
     try {
       this.invalidateCache();
-      await this.ensureMonthLoaded();
+      await this.ensureYearLoaded();
       this.filterReservationsForView();
 
       const conflicts = [];
       const valid = this.selection.filter(s => {
-        const occupied = this.allReservations.some(r =>
-          String(r.SalaID) === s.salaId && r.Fecha === s.fecha && String(r.BloqueID) === s.bloqueId
-        );
-        if (occupied) conflicts.push(s);
-        return !occupied;
+        if (this.getRes(s.salaId, s.fecha, s.bloqueId)) {
+          conflicts.push(s);
+          return false;
+        }
+        return true;
       });
 
       if (conflicts.length > 0) {
@@ -312,7 +392,7 @@ const Calendar = {
 
     if (isHidden) {
       const until = new Date();
-      until.setDate(until.getDate() + 21); // 3 semanas por defecto
+      until.setDate(until.getDate() + 21);
       document.getElementById('recurrence-until').value = this.formatDate(until);
     }
   },
@@ -336,21 +416,18 @@ const Calendar = {
 
     const untilDate = new Date(untilStr + 'T12:00:00');
 
-    // Load additional months if needed
-    const untilMonth = this.getMonthKey(untilDate);
-    const start = new Date(this.currentDate);
-    while (this.getMonthKey(start) <= untilMonth) {
-      const monthKey = this.getMonthKey(start);
-      if (monthKey !== this.loadedMonth) {
-        const res = await Api.fullInit(this.formatDate(start));
-        if (res.ok) {
-          const existingIds = new Set(this.allReservations.map(r => String(r.ID)));
-          res.data.reservas.forEach(r => {
-            if (!existingIds.has(String(r.ID))) this.allReservations.push(r);
-          });
-        }
+    // Load additional year if untilDate is in a different year
+    const untilYear = untilDate.getFullYear();
+    if (untilYear !== this.loadedYear) {
+      const res = await Api.getYearCompact(untilYear);
+      if (res.ok) {
+        const extra = this.expandCompact(res.data);
+        const existingIds = new Set(this.allReservations.map(r => r.ID));
+        extra.forEach(r => {
+          if (!existingIds.has(r.ID)) this.allReservations.push(r);
+        });
+        this.buildResMap();
       }
-      start.setMonth(start.getMonth() + 1);
     }
 
     let added = 0;
@@ -360,14 +437,11 @@ const Calendar = {
 
       while (cursor <= untilDate) {
         const dateStr = this.formatDate(cursor);
-        const salaId = String(p.salaId);
-        const bloqueId = String(p.bloqueId);
+        const salaId = p.salaId;
+        const bloqueId = p.bloqueId;
 
         if (!this.isSelected(salaId, dateStr, bloqueId)) {
-          const occupied = this.allReservations.some(r =>
-            String(r.SalaID) === salaId && String(r.BloqueID) === bloqueId && r.Fecha === dateStr
-          );
-          if (!occupied) {
+          if (!this.getRes(salaId, dateStr, bloqueId)) {
             this.selection.push({
               salaId, salaName: p.salaName, fecha: dateStr, bloqueId, bloqueLabel: p.bloqueLabel
             });
@@ -392,43 +466,45 @@ const Calendar = {
 
   // ── Data loading ──────────────────────────────────────
 
-  getRequiredMonths() {
-    const months = new Set();
-    months.add(this.getMonthKey(this.currentDate));
+  async ensureYearLoaded() {
+    const year = this.currentDate.getFullYear();
+    const yearsNeeded = new Set([year]);
+
+    // For week view crossing year boundary
     if (this.viewMode === 'week') {
       const monday = this.getMonday(this.currentDate);
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 6);
-      months.add(this.getMonthKey(monday));
-      months.add(this.getMonthKey(sunday));
+      yearsNeeded.add(monday.getFullYear());
+      yearsNeeded.add(sunday.getFullYear());
     }
-    return months;
-  },
 
-  async ensureMonthLoaded() {
-    const required = this.getRequiredMonths();
-    const missing = [...required].filter(m => m !== this.loadedMonth);
+    const missing = [...yearsNeeded].filter(y => y !== this.loadedYear);
     if (missing.length === 0) return;
 
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '<div class="text-center py-5"><div class="spinner-border" role="status"></div></div>';
 
-    const dateStr = this.formatDate(this.currentDate);
-    const res = await Api.fullInit(dateStr);
+    // Load primary year
+    const primaryYear = year;
+    const res = await Api.getYearCompact(primaryYear);
     if (res.ok) {
-      this.allReservations = res.data.reservas;
-      this.loadedMonth = this.getMonthKey(this.currentDate);
+      this.allReservations = this.expandCompact(res.data);
+      this.loadedYear = primaryYear;
     }
 
-    for (const m of required) {
-      if (m !== this.loadedMonth) {
-        const [y, mo] = m.split('-');
-        const extraRes = await Api.fullInit(`${y}-${mo}-01`);
+    // Load additional years if crossing boundary
+    for (const y of missing) {
+      if (y !== primaryYear) {
+        const extraRes = await Api.getYearCompact(y);
         if (extraRes.ok) {
-          this.allReservations = this.allReservations.concat(extraRes.data.reservas);
+          const extra = this.expandCompact(extraRes.data);
+          this.allReservations = this.allReservations.concat(extra);
         }
       }
     }
+
+    this.buildResMap();
   },
 
   filterReservationsForView() {
@@ -437,20 +513,20 @@ const Calendar = {
       this.reservations = this.allReservations.filter(r => r.Fecha === dateStr);
     } else if (this.viewMode === 'week') {
       const monday = this.getMonday(this.currentDate);
-      const dates = [];
+      const dates = new Set();
       for (let i = 0; i < 7; i++) {
         const d = new Date(monday);
         d.setDate(monday.getDate() + i);
-        dates.push(this.formatDate(d));
+        dates.add(this.formatDate(d));
       }
-      this.reservations = this.allReservations.filter(r => dates.includes(r.Fecha));
+      this.reservations = this.allReservations.filter(r => dates.has(r.Fecha));
     } else {
       this.reservations = this.allReservations;
     }
   },
 
   async loadAndRender() {
-    await this.ensureMonthLoaded();
+    await this.ensureYearLoaded();
     this.filterReservationsForView();
     this.renderCurrentView();
   },
@@ -476,19 +552,15 @@ const Calendar = {
   },
 
   renderOccupiedCell(reserva, userEmail) {
-    const isMine = String(reserva.Email).trim().toLowerCase() === userEmail.trim().toLowerCase();
+    const isMine = App.isMyEmail(reserva.Email);
     const cls = isMine ? 'cell-mine' : 'cell-occupied';
 
     if (isMine) {
-      const salaInfo = this.salas.find(l => String(l.ID) === String(reserva.SalaID));
-      const salaName = salaInfo ? salaInfo.Nombre : 'Sala ' + reserva.SalaID;
-      const blockInfo = this.bloques.find(b => String(b.ID) === String(reserva.BloqueID));
-      const bloqueLabel = blockInfo ? blockInfo.Etiqueta : 'Bloque ' + reserva.BloqueID;
-      const cancelSel = this.isCancelSelected(String(reserva.ID)) ? 'cell-cancel-selected' : '';
+      const cancelSel = this.isCancelSelected(reserva.ID) ? 'cell-cancel-selected' : '';
       return `<td class="calendar-cell ${cls} ${cancelSel}"
         data-cancel-sel="${reserva.ID}"
+        data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
         title="${reserva.Actividad || 'Reservado'} — Click para cancelar"
-        onclick="Calendar.toggleCancelCell('${reserva.ID}', '${String(reserva.SalaID)}', '${salaName.replace(/'/g, "\\'")}', '${reserva.Fecha}', '${String(reserva.BloqueID)}', '${bloqueLabel.replace(/'/g, "\\'")}')"
         style="cursor:pointer">
         <small><strong>${reserva.Actividad || 'Reservado'}</strong><br>${reserva.Nombre}</small>
       </td>`;
@@ -499,11 +571,11 @@ const Calendar = {
     </td>`;
   },
 
-  renderFreeCell(salaId, salaName, dateStr, blockId, blockLabel, blockIndex) {
-    const sel = this.isSelected(String(salaId), dateStr, String(blockId));
+  renderFreeCell(salaId, dateStr, blockId, blockIndex) {
+    const sel = this.isSelected(salaId, dateStr, blockId);
     return `<td class="calendar-cell cell-free ${sel ? 'cell-selected' : ''}"
       data-sel="${salaId}-${dateStr}-${blockId}"
-      onclick="Calendar.toggleCell('${salaId}', '${salaName.replace(/'/g, "\\'")}', '${dateStr}', '${blockId}', '${blockLabel.replace(/'/g, "\\'")}', ${blockIndex}, event)"
+      data-sala="${salaId}" data-fecha="${dateStr}" data-bloque="${blockId}" data-idx="${blockIndex}"
       title="Click para seleccionar (Shift+click para rango)">
       <small class="text-success">Libre</small>
     </td>`;
@@ -513,88 +585,81 @@ const Calendar = {
 
   renderDayGrid() {
     const container = document.getElementById('calendar-grid');
-    const userEmail = App.currentUser?.Email || '';
     const dateStr = this.formatDate(this.currentDate);
+    const h = [];
 
-    let html = '<div class="table-responsive"><table class="table table-bordered calendar-table">';
-    html += '<thead><tr><th class="sala-header">Sala</th>';
+    h.push('<div class="table-responsive"><table class="table table-bordered calendar-table">');
+    h.push('<thead><tr><th class="sala-header">Sala</th>');
     this.bloques.forEach(b => {
-      html += `<th class="text-center">${b.Etiqueta}</th>`;
+      h.push(`<th class="text-center">${b.Etiqueta}</th>`);
     });
-    html += '</tr></thead><tbody>';
+    h.push('</tr></thead><tbody>');
 
     this.salas.forEach(sala => {
-      html += `<tr><td class="sala-header"><strong>${sala.Nombre}</strong><br><small class="text-muted">Cap: ${sala.Capacidad}</small></td>`;
+      h.push(`<tr><td class="sala-header"><strong>${sala.Nombre}</strong><br><small class="text-muted">Cap: ${sala.Capacidad}</small></td>`);
       this.bloques.forEach((block, idx) => {
-        const reserva = this.reservations.find(r =>
-          String(r.SalaID) === String(sala.ID) && String(r.BloqueID) === String(block.ID)
-        );
+        const reserva = this.getRes(sala.ID, dateStr, block.ID);
         if (reserva) {
-          html += this.renderOccupiedCell(reserva, userEmail);
+          h.push(this.renderOccupiedCell(reserva));
         } else {
-          html += this.renderFreeCell(sala.ID, sala.Nombre, dateStr, block.ID, block.Etiqueta, idx);
+          h.push(this.renderFreeCell(sala.ID, dateStr, block.ID, idx));
         }
       });
-      html += '</tr>';
+      h.push('</tr>');
     });
 
-    html += '</tbody></table></div>';
-    container.innerHTML = html;
+    h.push('</tbody></table></div>');
+    container.innerHTML = h.join('');
   },
 
   // ── Week View ─────────────────────────────────────────
 
   renderWeekGrid() {
     const container = document.getElementById('calendar-grid');
-    const userEmail = App.currentUser?.Email || '';
     const monday = this.getMonday(this.currentDate);
     const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    const h = [];
 
-    let html = '';
+    // Pre-compute week dates
+    const weekDates = [];
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + d);
+      weekDates.push({ date, str: this.formatDate(date), dayNum: date.getDate() });
+    }
+
     this.salas.forEach(sala => {
-      html += `<h5 class="mt-4 mb-2">${sala.Nombre} <small class="text-muted">(Cap: ${sala.Capacidad})</small></h5>`;
-      html += '<div class="table-responsive"><table class="table table-bordered table-sm calendar-table">';
-      html += '<thead><tr><th></th>';
-      for (let d = 0; d < 7; d++) {
-        const date = new Date(monday);
-        date.setDate(monday.getDate() + d);
-        html += `<th class="text-center">${dayNames[d]} ${date.getDate()}</th>`;
-      }
-      html += '</tr></thead><tbody>';
+      h.push(`<h5 class="mt-4 mb-2">${sala.Nombre} <small class="text-muted">(Cap: ${sala.Capacidad})</small></h5>`);
+      h.push('<div class="table-responsive"><table class="table table-bordered table-sm calendar-table">');
+      h.push('<thead><tr><th></th>');
+      weekDates.forEach((wd, d) => {
+        h.push(`<th class="text-center">${dayNames[d]} ${wd.dayNum}</th>`);
+      });
+      h.push('</tr></thead><tbody>');
 
       this.bloques.forEach((block, idx) => {
-        html += `<tr><td class="text-nowrap"><small>${block.Etiqueta}</small></td>`;
-        for (let d = 0; d < 7; d++) {
-          const date = new Date(monday);
-          date.setDate(monday.getDate() + d);
-          const dateStr = this.formatDate(date);
-
-          const reserva = this.reservations.find(r =>
-            String(r.SalaID) === String(sala.ID) &&
-            String(r.BloqueID) === String(block.ID) &&
-            r.Fecha === dateStr
-          );
-
+        h.push(`<tr><td class="text-nowrap"><small>${block.Etiqueta}</small></td>`);
+        weekDates.forEach(wd => {
+          const reserva = this.getRes(sala.ID, wd.str, block.ID);
           if (reserva) {
-            html += this.renderOccupiedCell(reserva, userEmail);
+            h.push(this.renderOccupiedCell(reserva));
           } else {
-            html += this.renderFreeCell(sala.ID, sala.Nombre, dateStr, block.ID, block.Etiqueta, idx);
+            h.push(this.renderFreeCell(sala.ID, wd.str, block.ID, idx));
           }
-        }
-        html += '</tr>';
+        });
+        h.push('</tr>');
       });
 
-      html += '</tbody></table></div>';
+      h.push('</tbody></table></div>');
     });
 
-    container.innerHTML = html;
+    container.innerHTML = h.join('');
   },
 
   // ── Month View ────────────────────────────────────────
 
   renderMonthGrid() {
     const container = document.getElementById('calendar-grid');
-    const userEmail = App.currentUser?.Email || '';
     const year = this.currentDate.getFullYear();
     const month = this.currentDate.getMonth();
     const lastDay = new Date(year, month + 1, 0);
@@ -602,35 +667,36 @@ const Calendar = {
     const totalBlocks = this.bloques.length;
 
     const dayStats = {};
+    const userEmail = App.currentUser?.Email || '';
     this.reservations.forEach(r => {
       const key = r.Fecha;
       if (!dayStats[key]) dayStats[key] = {};
       if (!dayStats[key][r.SalaID]) dayStats[key][r.SalaID] = { occupied: 0, mine: 0 };
       dayStats[key][r.SalaID].occupied++;
-      if (String(r.Email).trim().toLowerCase() === userEmail.trim().toLowerCase())
-        dayStats[key][r.SalaID].mine++;
+      if (App.isMyEmail(r.Email)) dayStats[key][r.SalaID].mine++;
     });
 
-    // Lab filter
-    let html = `<div class="mb-3">
+    const h = [];
+
+    // Sala filter
+    h.push(`<div class="mb-3">
       <label class="form-label fw-bold">Sala:</label>
-      <select id="month-sala-filter" class="form-select form-select-sm d-inline-block" style="width:auto"
-        onchange="Calendar.renderMonthGrid()">
-        <option value="">Todas las salas</option>`;
+      <select id="month-sala-filter" class="form-select form-select-sm d-inline-block" style="width:auto">
+        <option value="">Todas las salas</option>`);
     this.salas.forEach(sala => {
-      html += `<option value="${sala.ID}">${sala.Nombre}</option>`;
+      h.push(`<option value="${sala.ID}">${sala.Nombre}</option>`);
     });
-    html += '</select></div>';
+    h.push('</select></div>');
 
     const selectedSala = document.getElementById('month-sala-filter')?.value || '';
 
     if (selectedSala) {
-      html += this.renderMonthDetailedForSala(selectedSala, year, month, totalDays, userEmail);
+      h.push(this.renderMonthDetailedForSala(Number(selectedSala), year, month, totalDays));
     } else {
-      html += this.renderMonthOverview(year, month, totalDays, totalBlocks, dayStats);
+      h.push(this.renderMonthOverview(year, month, totalDays, totalBlocks, dayStats));
     }
 
-    container.innerHTML = html;
+    container.innerHTML = h.join('');
     if (selectedSala) document.getElementById('month-sala-filter').value = selectedSala;
   },
 
@@ -638,94 +704,94 @@ const Calendar = {
     const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
     const firstDay = new Date(year, month, 1);
     const startOffset = (firstDay.getDay() + 6) % 7;
+    const todayStr = this.formatDate(new Date());
+    const h = [];
 
-    let html = '<div class="table-responsive"><table class="table table-bordered month-table">';
-    html += '<thead><tr>';
-    dayNames.forEach(d => { html += `<th class="text-center">${d}</th>`; });
-    html += '</tr></thead><tbody><tr>';
+    h.push('<div class="table-responsive"><table class="table table-bordered month-table">');
+    h.push('<thead><tr>');
+    dayNames.forEach(d => { h.push(`<th class="text-center">${d}</th>`); });
+    h.push('</tr></thead><tbody><tr>');
 
     for (let i = 0; i < startOffset; i++) {
-      html += '<td class="month-cell month-cell-empty"></td>';
+      h.push('<td class="month-cell month-cell-empty"></td>');
     }
 
     for (let day = 1; day <= totalDays; day++) {
       const date = new Date(year, month, day);
       const dateStr = this.formatDate(date);
-      const isToday = dateStr === this.formatDate(new Date());
+      const isToday = dateStr === todayStr;
       const stats = dayStats[dateStr] || {};
 
-      html += `<td class="month-cell ${isToday ? 'month-cell-today' : ''}"
-        onclick="Calendar.goToDay('${dateStr}')" title="Click para ver día">
+      h.push(`<td class="month-cell ${isToday ? 'month-cell-today' : ''}"
+        data-goto-day="${dateStr}" title="Click para ver día">
         <div class="month-day-number">${day}</div>
-        <div class="month-day-content">`;
+        <div class="month-day-content">`);
 
       this.salas.forEach(sala => {
         const s = stats[sala.ID];
         if (s) {
           const pct = Math.round((s.occupied / totalBlocks) * 100);
           const barClass = pct >= 80 ? 'bg-danger' : pct >= 40 ? 'bg-warning' : 'bg-success';
-          html += `<div class="month-lab-row" title="${sala.Nombre}: ${s.occupied}/${totalBlocks} bloques">
+          h.push(`<div class="month-lab-row" title="${sala.Nombre}: ${s.occupied}/${totalBlocks} bloques">
             <small class="month-lab-name">${sala.Nombre.substring(0, 8)}</small>
             <div class="progress month-progress">
               <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
             </div>
-          </div>`;
+          </div>`);
         }
       });
 
-      html += '</div></td>';
-      if ((startOffset + day) % 7 === 0 && day < totalDays) html += '</tr><tr>';
+      h.push('</div></td>');
+      if ((startOffset + day) % 7 === 0 && day < totalDays) h.push('</tr><tr>');
     }
 
     const remaining = (startOffset + totalDays) % 7;
     if (remaining > 0) {
-      for (let i = remaining; i < 7; i++) html += '<td class="month-cell month-cell-empty"></td>';
+      for (let i = remaining; i < 7; i++) h.push('<td class="month-cell month-cell-empty"></td>');
     }
 
-    html += '</tr></tbody></table></div>';
-    return html;
+    h.push('</tr></tbody></table></div>');
+    return h.join('');
   },
 
-  renderMonthDetailedForSala(salaId, year, month, totalDays, userEmail) {
-    const sala = this.salas.find(l => String(l.ID) === String(salaId));
+  renderMonthDetailedForSala(salaId, year, month, totalDays) {
+    const sala = this.salas.find(l => l.ID === salaId);
     const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    const todayStr = this.formatDate(new Date());
+    const h = [];
 
-    let html = `<h5>${sala.Nombre} — Vista detallada del mes</h5>`;
-    html += '<div class="table-responsive"><table class="table table-bordered table-sm calendar-table">';
-    html += '<thead><tr><th>Día</th>';
+    h.push(`<h5>${sala.Nombre} — Vista detallada del mes</h5>`);
+    h.push('<div class="table-responsive"><table class="table table-bordered table-sm calendar-table">');
+    h.push('<thead><tr><th>Día</th>');
     this.bloques.forEach(b => {
-      html += `<th class="text-center"><small>${b.Etiqueta}</small></th>`;
+      h.push(`<th class="text-center"><small>${b.Etiqueta}</small></th>`);
     });
-    html += '</tr></thead><tbody>';
+    h.push('</tr></thead><tbody>');
 
     for (let day = 1; day <= totalDays; day++) {
       const date = new Date(year, month, day);
       const dateStr = this.formatDate(date);
       const dayOfWeek = (date.getDay() + 6) % 7;
-      const isToday = dateStr === this.formatDate(new Date());
+      const isToday = dateStr === todayStr;
       const isWeekend = dayOfWeek >= 5;
 
-      html += `<tr class="${isToday ? 'table-info' : ''} ${isWeekend ? 'table-light' : ''}">`;
-      html += `<td class="text-nowrap"><strong>${dayNames[dayOfWeek]} ${day}</strong></td>`;
+      h.push(`<tr class="${isToday ? 'table-info' : ''} ${isWeekend ? 'table-light' : ''}">`);
+      h.push(`<td class="text-nowrap"><strong>${dayNames[dayOfWeek]} ${day}</strong></td>`);
 
       this.bloques.forEach((block, idx) => {
-        const reserva = this.reservations.find(r =>
-          String(r.SalaID) === String(salaId) &&
-          String(r.BloqueID) === String(block.ID) &&
-          r.Fecha === dateStr
-        );
+        const reserva = this.getRes(salaId, dateStr, block.ID);
         if (reserva) {
-          html += this.renderOccupiedCell(reserva, userEmail);
+          h.push(this.renderOccupiedCell(reserva));
         } else {
-          html += this.renderFreeCell(sala.ID, sala.Nombre, dateStr, block.ID, block.Etiqueta, idx);
+          h.push(this.renderFreeCell(sala.ID, dateStr, block.ID, idx));
         }
       });
 
-      html += '</tr>';
+      h.push('</tr>');
     }
 
-    html += '</tbody></table></div>';
-    return html;
+    h.push('</tbody></table></div>');
+    return h.join('');
   },
 
   goToDay(dateStr) {
