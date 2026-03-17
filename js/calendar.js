@@ -1,5 +1,5 @@
 /* ============================================
-   Vista de Calendario / Grilla de Ocupación
+   Vista Semanal – Grid 2×2 de Salas
    Sistema de Reserva de Salas SJO
    ============================================ */
 
@@ -7,18 +7,13 @@ const Calendar = {
   currentDate: new Date(),
   salas: [],
   bloques: [],
-  reservations: [],
   allReservations: [],
   loadedYear: null,
-  viewMode: 'day',
   refreshInterval: null,
   _resMap: new Map(),
 
-  // Selección múltiple de celdas libres (para reservar)
   selection: [],
   lastClicked: null,
-
-  // Selección múltiple de celdas propias (para cancelar)
   cancelSelection: [],
 
   formatDate(d) {
@@ -35,12 +30,6 @@ const Calendar = {
     const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
-  },
-
-  formatMonthYear(d) {
-    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-                    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    return `${months[d.getMonth()]} ${d.getFullYear()}`;
   },
 
   getMonday(d) {
@@ -73,8 +62,7 @@ const Calendar = {
     this.buildResMap();
     this.setupNavigation();
     this.setupEventDelegation();
-    this.filterReservationsForView();
-    this.renderCurrentView();
+    this.render();
     this.startAutoRefresh();
   },
 
@@ -96,10 +84,6 @@ const Calendar = {
         this.loadAndRender();
       }
     };
-
-    document.getElementById('btn-view-day').onclick = () => this.setViewMode('day');
-    document.getElementById('btn-view-week').onclick = () => this.setViewMode('week');
-    document.getElementById('btn-view-month').onclick = () => this.setViewMode('month');
   },
 
   setupEventDelegation() {
@@ -126,37 +110,12 @@ const Calendar = {
         const sala = this.salas.find(s => s.ID === salaId);
         const bloque = this.bloques.find(b => b.ID === bloqueId);
         this.toggleCancelCell(reservaId, salaId, sala ? sala.Nombre : 'Sala ' + salaId, fecha, bloqueId, bloque ? bloque.Etiqueta : 'Bloque ' + bloqueId);
-        return;
-      }
-
-      const monthCell = e.target.closest('[data-goto-day]');
-      if (monthCell) {
-        this.goToDay(monthCell.dataset.gotoDay);
       }
     });
-
-    container.addEventListener('change', e => {
-      if (e.target.id === 'month-sala-filter') {
-        this.renderMonthGrid();
-      }
-    });
-  },
-
-  setViewMode(mode) {
-    this.viewMode = mode;
-    document.querySelectorAll('.btn-view-mode').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('btn-view-' + mode).classList.add('active');
-    this.loadAndRender();
   },
 
   navigate(dir) {
-    if (this.viewMode === 'day') {
-      this.currentDate.setDate(this.currentDate.getDate() + dir);
-    } else if (this.viewMode === 'week') {
-      this.currentDate.setDate(this.currentDate.getDate() + (dir * 7));
-    } else {
-      this.currentDate.setMonth(this.currentDate.getMonth() + dir);
-    }
+    this.currentDate.setDate(this.currentDate.getDate() + (dir * 7));
     document.getElementById('date-picker').value = this.formatDate(this.currentDate);
     this.loadAndRender();
   },
@@ -202,8 +161,7 @@ const Calendar = {
       this.loadedYear = null;
       this.allReservations = [];
       await this.ensureYearLoaded();
-      this.filterReservationsForView();
-      this.renderCurrentView();
+      this.render();
     }, 90000);
   },
 
@@ -299,7 +257,6 @@ const Calendar = {
         `${this.selection.length} bloque(s) seleccionado(s):<br>` + lines.join('<br>');
     }
 
-    // Cancel bar
     const cancelBar = document.getElementById('cancel-selection-bar');
     if (this.cancelSelection.length === 0) {
       cancelBar.classList.add('d-none');
@@ -331,7 +288,6 @@ const Calendar = {
     try {
       this.invalidateCache();
       await this.ensureYearLoaded();
-      this.filterReservationsForView();
 
       const conflicts = [];
       const valid = this.selection.filter(s => {
@@ -346,7 +302,7 @@ const Calendar = {
         this.selection = valid;
         this.updateSelectionUI();
         this.updateSelectionBar();
-        this.renderCurrentView();
+        this.render();
         App.showToast(`${conflicts.length} bloque(s) ya fueron reservados por otro usuario`, 'warning');
       }
 
@@ -416,7 +372,6 @@ const Calendar = {
 
     const untilDate = new Date(untilStr + 'T12:00:00');
 
-    // Load additional year if untilDate is in a different year
     const untilYear = untilDate.getFullYear();
     if (untilYear !== this.loadedYear) {
       const res = await Api.getYearCompact(untilYear);
@@ -470,14 +425,11 @@ const Calendar = {
     const year = this.currentDate.getFullYear();
     const yearsNeeded = new Set([year]);
 
-    // For week view crossing year boundary
-    if (this.viewMode === 'week') {
-      const monday = this.getMonday(this.currentDate);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      yearsNeeded.add(monday.getFullYear());
-      yearsNeeded.add(sunday.getFullYear());
-    }
+    const monday = this.getMonday(this.currentDate);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    yearsNeeded.add(monday.getFullYear());
+    yearsNeeded.add(sunday.getFullYear());
 
     const missing = [...yearsNeeded].filter(y => y !== this.loadedYear);
     if (missing.length === 0) return;
@@ -485,7 +437,6 @@ const Calendar = {
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '<div class="text-center py-5"><div class="spinner-border" role="status"></div></div>';
 
-    // Load primary year
     const primaryYear = year;
     const res = await Api.getYearCompact(primaryYear);
     if (res.ok) {
@@ -493,7 +444,6 @@ const Calendar = {
       this.loadedYear = primaryYear;
     }
 
-    // Load additional years if crossing boundary
     for (const y of missing) {
       if (y !== primaryYear) {
         const extraRes = await Api.getYearCompact(y);
@@ -507,138 +457,90 @@ const Calendar = {
     this.buildResMap();
   },
 
-  filterReservationsForView() {
-    const dateStr = this.formatDate(this.currentDate);
-    if (this.viewMode === 'day') {
-      this.reservations = this.allReservations.filter(r => r.Fecha === dateStr);
-    } else if (this.viewMode === 'week') {
-      const monday = this.getMonday(this.currentDate);
-      const dates = new Set();
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        dates.add(this.formatDate(d));
-      }
-      this.reservations = this.allReservations.filter(r => dates.has(r.Fecha));
-    } else {
-      this.reservations = this.allReservations;
-    }
-  },
-
   async loadAndRender() {
     await this.ensureYearLoaded();
-    this.filterReservationsForView();
-    this.renderCurrentView();
+    this.render();
   },
 
   // ── Render ────────────────────────────────────────────
 
-  renderCurrentView() {
-    if (this.viewMode === 'day') {
-      document.getElementById('current-date').textContent = this.formatDisplayDate(this.currentDate);
-      this.renderDayGrid();
-    } else if (this.viewMode === 'week') {
-      const monday = this.getMonday(this.currentDate);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      document.getElementById('current-date').textContent =
-        `${this.formatDisplayDate(monday)} — ${this.formatDisplayDate(sunday)}`;
-      this.renderWeekGrid();
-    } else {
-      document.getElementById('current-date').textContent = this.formatMonthYear(this.currentDate);
-      this.renderMonthGrid();
-    }
+  render() {
+    const monday = this.getMonday(this.currentDate);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    document.getElementById('current-date').textContent =
+      `${this.formatDisplayDate(monday)} — ${this.formatDisplayDate(sunday)}`;
+    this.renderWeekGrid();
     this.updateSelectionUI();
   },
 
-  renderOccupiedCell(reserva, userEmail) {
+  renderOccupiedCell(reserva) {
     const isMine = App.isMyEmail(reserva.Email);
     const cls = isMine ? 'cell-mine' : 'cell-occupied';
+    const act = reserva.Actividad || 'Reservado';
+    const name = reserva.Nombre.split(' ')[0];
 
     if (isMine) {
       const cancelSel = this.isCancelSelected(reserva.ID) ? 'cell-cancel-selected' : '';
-      return `<td class="calendar-cell ${cls} ${cancelSel}"
+      return `<td class="${cls} ${cancelSel}"
         data-cancel-sel="${reserva.ID}"
         data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
-        title="${reserva.Actividad || 'Reservado'} — Click para cancelar"
-        style="cursor:pointer">
-        <small><strong>${reserva.Actividad || 'Reservado'}</strong><br>${reserva.Nombre}</small>
+        title="${reserva.Actividad || 'Reservado'} — ${reserva.Nombre} — Click para cancelar">
+        <div class="cell-act">${act}</div><div class="cell-name">${name}</div>
       </td>`;
     }
 
-    return `<td class="calendar-cell ${cls}" title="${reserva.Nombre} — ${reserva.Actividad || 'Sin actividad'}">
-      <small><strong>${reserva.Actividad || 'Reservado'}</strong><br>${reserva.Nombre}</small>
+    return `<td class="${cls}" title="${reserva.Nombre} — ${reserva.Actividad || 'Sin actividad'}">
+      <div class="cell-act">${act}</div><div class="cell-name">${name}</div>
     </td>`;
   },
 
   renderFreeCell(salaId, dateStr, blockId, blockIndex) {
     const sel = this.isSelected(salaId, dateStr, blockId);
-    return `<td class="calendar-cell cell-free ${sel ? 'cell-selected' : ''}"
+    return `<td class="cell-free ${sel ? 'cell-selected' : ''}"
       data-sel="${salaId}-${dateStr}-${blockId}"
       data-sala="${salaId}" data-fecha="${dateStr}" data-bloque="${blockId}" data-idx="${blockIndex}"
       title="Click para seleccionar (Shift+click para rango)">
-      <small class="text-success">Libre</small>
     </td>`;
   },
 
-  // ── Day View ──────────────────────────────────────────
-
-  renderDayGrid() {
-    const container = document.getElementById('calendar-grid');
-    const dateStr = this.formatDate(this.currentDate);
-    const h = [];
-
-    h.push('<div class="table-responsive"><table class="table table-bordered calendar-table">');
-    h.push('<thead><tr><th class="sala-header">Sala</th>');
-    this.bloques.forEach(b => {
-      h.push(`<th class="text-center">${b.Etiqueta}</th>`);
-    });
-    h.push('</tr></thead><tbody>');
-
-    this.salas.forEach(sala => {
-      h.push(`<tr><td class="sala-header"><strong>${sala.Nombre}</strong><br><small class="text-muted">Cap: ${sala.Capacidad}</small></td>`);
-      this.bloques.forEach((block, idx) => {
-        const reserva = this.getRes(sala.ID, dateStr, block.ID);
-        if (reserva) {
-          h.push(this.renderOccupiedCell(reserva));
-        } else {
-          h.push(this.renderFreeCell(sala.ID, dateStr, block.ID, idx));
-        }
-      });
-      h.push('</tr>');
-    });
-
-    h.push('</tbody></table></div>');
-    container.innerHTML = h.join('');
-  },
-
-  // ── Week View ─────────────────────────────────────────
+  // ── Week Grid (2×2) ───────────────────────────────────
 
   renderWeekGrid() {
     const container = document.getElementById('calendar-grid');
     const monday = this.getMonday(this.currentDate);
     const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const h = [];
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const todayStr = this.formatDate(new Date());
 
-    // Pre-compute week dates
     const weekDates = [];
     for (let d = 0; d < 7; d++) {
       const date = new Date(monday);
       date.setDate(monday.getDate() + d);
-      weekDates.push({ date, str: this.formatDate(date), dayNum: date.getDate() });
+      weekDates.push({
+        date,
+        str: this.formatDate(date),
+        label: `${dayNames[d]} ${date.getDate()}`,
+        isToday: this.formatDate(date) === todayStr,
+        isWeekend: d >= 5
+      });
     }
 
+    const h = ['<div class="sala-grid">'];
+
     this.salas.forEach(sala => {
-      h.push(`<h5 class="mt-4 mb-2">${sala.Nombre} <small class="text-muted">(Cap: ${sala.Capacidad})</small></h5>`);
-      h.push('<div class="table-responsive"><table class="table table-bordered table-sm calendar-table">');
-      h.push('<thead><tr><th></th>');
-      weekDates.forEach((wd, d) => {
-        h.push(`<th class="text-center">${dayNames[d]} ${wd.dayNum}</th>`);
+      h.push(`<div class="sala-panel">`);
+      h.push(`<div class="sala-panel-header"><span class="sala-panel-name">${sala.Nombre}</span><span class="sala-panel-cap">Cap. ${sala.Capacidad}</span></div>`);
+      h.push('<table class="week-table">');
+      h.push('<thead><tr><th class="col-hora">Hora</th>');
+      weekDates.forEach(wd => {
+        const cls = wd.isToday ? 'col-day col-today' : wd.isWeekend ? 'col-day col-weekend' : 'col-day';
+        h.push(`<th class="${cls}">${wd.label}</th>`);
       });
       h.push('</tr></thead><tbody>');
 
       this.bloques.forEach((block, idx) => {
-        h.push(`<tr><td class="text-nowrap"><small>${block.Etiqueta}</small></td>`);
+        h.push(`<tr><td class="col-hora">${block.Etiqueta}</td>`);
         weekDates.forEach(wd => {
           const reserva = this.getRes(sala.ID, wd.str, block.ID);
           if (reserva) {
@@ -650,157 +552,11 @@ const Calendar = {
         h.push('</tr>');
       });
 
-      h.push('</tbody></table></div>');
+      h.push('</tbody></table>');
+      h.push('</div>');
     });
 
+    h.push('</div>');
     container.innerHTML = h.join('');
-  },
-
-  // ── Month View ────────────────────────────────────────
-
-  renderMonthGrid() {
-    const container = document.getElementById('calendar-grid');
-    const year = this.currentDate.getFullYear();
-    const month = this.currentDate.getMonth();
-    const lastDay = new Date(year, month + 1, 0);
-    const totalDays = lastDay.getDate();
-    const totalBlocks = this.bloques.length;
-
-    const dayStats = {};
-    const userEmail = App.currentUser?.Email || '';
-    this.reservations.forEach(r => {
-      const key = r.Fecha;
-      if (!dayStats[key]) dayStats[key] = {};
-      if (!dayStats[key][r.SalaID]) dayStats[key][r.SalaID] = { occupied: 0, mine: 0 };
-      dayStats[key][r.SalaID].occupied++;
-      if (App.isMyEmail(r.Email)) dayStats[key][r.SalaID].mine++;
-    });
-
-    const h = [];
-
-    // Sala filter
-    h.push(`<div class="mb-3">
-      <label class="form-label fw-bold">Sala:</label>
-      <select id="month-sala-filter" class="form-select form-select-sm d-inline-block" style="width:auto">
-        <option value="">Todas las salas</option>`);
-    this.salas.forEach(sala => {
-      h.push(`<option value="${sala.ID}">${sala.Nombre}</option>`);
-    });
-    h.push('</select></div>');
-
-    const selectedSala = document.getElementById('month-sala-filter')?.value || '';
-
-    if (selectedSala) {
-      h.push(this.renderMonthDetailedForSala(Number(selectedSala), year, month, totalDays));
-    } else {
-      h.push(this.renderMonthOverview(year, month, totalDays, totalBlocks, dayStats));
-    }
-
-    container.innerHTML = h.join('');
-    if (selectedSala) document.getElementById('month-sala-filter').value = selectedSala;
-  },
-
-  renderMonthOverview(year, month, totalDays, totalBlocks, dayStats) {
-    const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const firstDay = new Date(year, month, 1);
-    const startOffset = (firstDay.getDay() + 6) % 7;
-    const todayStr = this.formatDate(new Date());
-    const h = [];
-
-    h.push('<div class="table-responsive"><table class="table table-bordered month-table">');
-    h.push('<thead><tr>');
-    dayNames.forEach(d => { h.push(`<th class="text-center">${d}</th>`); });
-    h.push('</tr></thead><tbody><tr>');
-
-    for (let i = 0; i < startOffset; i++) {
-      h.push('<td class="month-cell month-cell-empty"></td>');
-    }
-
-    for (let day = 1; day <= totalDays; day++) {
-      const date = new Date(year, month, day);
-      const dateStr = this.formatDate(date);
-      const isToday = dateStr === todayStr;
-      const stats = dayStats[dateStr] || {};
-
-      h.push(`<td class="month-cell ${isToday ? 'month-cell-today' : ''}"
-        data-goto-day="${dateStr}" title="Click para ver día">
-        <div class="month-day-number">${day}</div>
-        <div class="month-day-content">`);
-
-      this.salas.forEach(sala => {
-        const s = stats[sala.ID];
-        if (s) {
-          const pct = Math.round((s.occupied / totalBlocks) * 100);
-          const barClass = pct >= 80 ? 'bg-danger' : pct >= 40 ? 'bg-warning' : 'bg-success';
-          h.push(`<div class="month-lab-row" title="${sala.Nombre}: ${s.occupied}/${totalBlocks} bloques">
-            <small class="month-lab-name">${sala.Nombre.substring(0, 8)}</small>
-            <div class="progress month-progress">
-              <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
-            </div>
-          </div>`);
-        }
-      });
-
-      h.push('</div></td>');
-      if ((startOffset + day) % 7 === 0 && day < totalDays) h.push('</tr><tr>');
-    }
-
-    const remaining = (startOffset + totalDays) % 7;
-    if (remaining > 0) {
-      for (let i = remaining; i < 7; i++) h.push('<td class="month-cell month-cell-empty"></td>');
-    }
-
-    h.push('</tr></tbody></table></div>');
-    return h.join('');
-  },
-
-  renderMonthDetailedForSala(salaId, year, month, totalDays) {
-    const sala = this.salas.find(l => l.ID === salaId);
-    const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const todayStr = this.formatDate(new Date());
-    const h = [];
-
-    h.push(`<h5>${sala.Nombre} — Vista detallada del mes</h5>`);
-    h.push('<div class="table-responsive"><table class="table table-bordered table-sm calendar-table">');
-    h.push('<thead><tr><th>Día</th>');
-    this.bloques.forEach(b => {
-      h.push(`<th class="text-center"><small>${b.Etiqueta}</small></th>`);
-    });
-    h.push('</tr></thead><tbody>');
-
-    for (let day = 1; day <= totalDays; day++) {
-      const date = new Date(year, month, day);
-      const dateStr = this.formatDate(date);
-      const dayOfWeek = (date.getDay() + 6) % 7;
-      const isToday = dateStr === todayStr;
-      const isWeekend = dayOfWeek >= 5;
-
-      h.push(`<tr class="${isToday ? 'table-info' : ''} ${isWeekend ? 'table-light' : ''}">`);
-      h.push(`<td class="text-nowrap"><strong>${dayNames[dayOfWeek]} ${day}</strong></td>`);
-
-      this.bloques.forEach((block, idx) => {
-        const reserva = this.getRes(salaId, dateStr, block.ID);
-        if (reserva) {
-          h.push(this.renderOccupiedCell(reserva));
-        } else {
-          h.push(this.renderFreeCell(sala.ID, dateStr, block.ID, idx));
-        }
-      });
-
-      h.push('</tr>');
-    }
-
-    h.push('</tbody></table></div>');
-    return h.join('');
-  },
-
-  goToDay(dateStr) {
-    this.currentDate = new Date(dateStr + 'T12:00:00');
-    document.getElementById('date-picker').value = dateStr;
-    this.viewMode = 'day';
-    document.querySelectorAll('.btn-view-mode').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('btn-view-day').classList.add('active');
-    this.filterReservationsForView();
-    this.renderCurrentView();
   }
 };

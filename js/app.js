@@ -64,7 +64,7 @@ const App = {
       }
     } catch (e) {
       if (!silent) {
-        document.getElementById('login-error').textContent = 'Error de conexión';
+        document.getElementById('login-error').textContent = 'Error de conexión: ' + e.message;
         document.getElementById('login-error').classList.remove('d-none');
       }
     } finally {
@@ -74,7 +74,7 @@ const App = {
   },
 
   showApp() {
-    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('login-screen').classList.add('d-none');
     document.getElementById('app-container').classList.remove('d-none');
     document.getElementById('user-display').textContent = this.currentUser.Nombre;
 
@@ -93,7 +93,7 @@ const App = {
     Calendar.stopAutoRefresh();
     this._modalReservar = null;
     this._modalCancelar = null;
-    document.getElementById('login-screen').style.display = '';
+    document.getElementById('login-screen').classList.remove('d-none');
     document.getElementById('app-container').classList.add('d-none');
   },
 

@@ -9,12 +9,17 @@ const Api = {
   async _get(params) {
     const url = new URL(API_URL);
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), { redirect: 'follow' });
     return res.json();
   },
 
   async _post(body) {
-    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    });
     return res.json();
   },
 

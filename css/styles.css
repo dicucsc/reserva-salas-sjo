@@ -1,16 +1,16 @@
 /* ============================================
    Sistema de Reserva de Salas SJO
-   Professional UI Theme
+   Vista Semanal 2×2 – Máxima legibilidad
    ============================================ */
 
 :root {
-  --color-bg: #f4f6f9;
+  --color-bg: #f1f3f7;
   --color-surface: #ffffff;
-  --color-border: #e2e6ed;
-  --color-border-light: #eef1f6;
+  --color-border: #dde1e8;
+  --color-border-light: #e8ecf2;
 
   --color-text: #1e293b;
-  --color-text-secondary: #64748b;
+  --color-text-secondary: #475569;
   --color-text-muted: #94a3b8;
 
   --color-primary: #3b5bdb;
@@ -18,30 +18,30 @@
   --color-primary-subtle: #edf2ff;
   --color-primary-border: #bac8ff;
 
-  --color-free: #ecfdf5;
-  --color-free-hover: #d1fae5;
+  --color-free: #f0fdf4;
+  --color-free-hover: #dcfce7;
   --color-free-accent: #059669;
   --color-occupied: #fef2f2;
-  --color-occupied-accent: #dc2626;
+  --color-occupied-accent: #b91c1c;
   --color-mine: #fffbeb;
   --color-mine-hover: #fef3c7;
-  --color-mine-accent: #d97706;
+  --color-mine-accent: #b45309;
 
   --color-selected: #dbeafe;
   --color-selected-border: #3b82f6;
   --color-cancel-selected: #fee2e2;
   --color-cancel-selected-border: #ef4444;
 
-  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
   --shadow-md: 0 2px 8px rgba(0,0,0,.08);
-  --shadow-lg: 0 4px 16px rgba(0,0,0,.1);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,.12);
 
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --navbar-height: 56px;
+  --navbar-height: 44px;
 }
 
 /* --- Base --- */
@@ -53,23 +53,21 @@
 body {
   font-family: var(--font-sans);
   font-size: 0.875rem;
-  line-height: 1.5;
+  line-height: 1.4;
   color: var(--color-text);
   background-color: var(--color-bg);
+  overflow: hidden;
+  height: 100vh;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   color: var(--color-text);
-  letter-spacing: -0.01em;
 }
 
-small { font-size: 0.8125em; }
-
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #c1c8d4; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #a0a8b8; }
+::-webkit-scrollbar-thumb { background: #c1c8d4; border-radius: 2px; }
 
 /* ── Login ───────────────────────────────────────────── */
 
@@ -88,7 +86,6 @@ small { font-size: 0.8125em; }
 #login-screen .card-title {
   font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
 }
 
 #login-screen .form-label {
@@ -123,60 +120,63 @@ small { font-size: 0.8125em; }
   border-color: var(--color-primary-hover);
 }
 
-/* ── Navbar ──────────────────────────────────────────── */
+/* ── Navbar (compact) ────────────────────────────────── */
 
 .navbar {
   background: #1e293b !important;
   min-height: var(--navbar-height);
-  padding: 0 1rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  padding: 0 0.75rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.15);
 }
 
 .navbar-brand {
   font-weight: 700;
-  font-size: 1rem;
-  letter-spacing: -0.02em;
+  font-size: 0.875rem;
   color: #fff !important;
 }
 
 .navbar-nav .nav-link {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: rgba(255,255,255,.7) !important;
-  padding: 0.5rem 0.875rem !important;
+  padding: 0.3rem 0.625rem !important;
   border-radius: var(--radius-sm);
-  transition: color 0.15s, background 0.15s;
 }
 
-.navbar-nav .nav-link:hover {
-  color: #fff !important;
-  background: rgba(255,255,255,.08);
-}
+.navbar-nav .nav-link:hover { color: #fff !important; background: rgba(255,255,255,.08); }
+.navbar-nav .nav-link.active { color: #fff !important; background: rgba(255,255,255,.12); }
 
-.navbar-nav .nav-link.active {
-  color: #fff !important;
-  background: rgba(255,255,255,.12);
-}
+#user-display { font-size: 0.6875rem; color: rgba(255,255,255,.55) !important; }
+#btn-logout { font-size: 0.6875rem; padding: 0.2rem 0.5rem; }
 
-#user-display {
-  font-size: 0.75rem;
-  color: rgba(255,255,255,.6) !important;
-}
+/* ── App Layout (fill viewport) ─────────────────────── */
 
-#btn-logout {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-sm);
-  font-weight: 500;
+#app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
 }
-
-/* ── Main Container ──────────────────────────────────── */
 
 .container-fluid.mt-3 {
-  margin-top: 1.25rem !important;
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
-  max-width: 1440px;
+  margin-top: 0 !important;
+  padding: 0.5rem 0.75rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+#view-calendario {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+#calendar-grid {
+  flex: 1;
+  overflow: hidden;
 }
 
 /* ── Toolbar ─────────────────────────────────────────── */
@@ -189,43 +189,22 @@ small { font-size: 0.8125em; }
 
 .date-nav h5 {
   margin: 0;
-  min-width: 260px;
-  text-align: center;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .date-nav .btn {
-  font-size: 0.8125rem;
-  padding: 0.3rem 0.625rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
   border-radius: var(--radius-sm);
 }
 
 .date-nav .form-control-sm {
-  font-size: 0.8125rem;
-  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.4rem;
   border-radius: var(--radius-sm);
   border-color: var(--color-border);
-}
-
-.btn-view-mode {
-  font-size: 0.75rem !important;
-  font-weight: 500;
-  padding: 0.3rem 0.75rem !important;
-  border-color: var(--color-border) !important;
-  color: var(--color-text-secondary) !important;
-  background: var(--color-surface);
-}
-
-.btn-view-mode:hover {
-  background: var(--color-bg) !important;
-  color: var(--color-text) !important;
-}
-
-.btn-view-mode.active {
-  background: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-  color: #fff !important;
 }
 
 /* ── Legend Bar ───────────────────────────────────────── */
@@ -233,121 +212,199 @@ small { font-size: 0.8125em; }
 .legend-bar {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.5rem 0;
-  font-size: 0.75rem;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+  font-size: 0.6875rem;
   color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
 
 .legend-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  margin-right: 4px;
+  margin-right: 3px;
   vertical-align: middle;
 }
 
 .legend-hint {
   color: var(--color-text-muted);
-  font-size: 0.6875rem;
-  margin-left: 0.25rem;
+  font-size: 0.625rem;
 }
 
-/* ── Calendar & Month Table Headers (unified) ────────── */
+/* ── Sala Grid (2×2, fills viewport) ─────────────────── */
 
-.calendar-table,
-.month-table {
+.sala-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 0.5rem;
+  height: 100%;
+}
+
+.sala-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.sala-panel-header {
+  background: #1e293b;
+  color: #fff;
+  padding: 0.3rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.sala-panel-name { letter-spacing: -0.01em; }
+
+.sala-panel-cap {
+  font-weight: 400;
+  font-size: 0.625rem;
+  color: rgba(255,255,255,.45);
+}
+
+/* ── Week Table (fills panel) ────────────────────────── */
+
+.week-table {
+  width: 100%;
+  height: 100%;
   table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: 0.75rem;
 }
 
-.calendar-table { font-size: 0.8125rem; }
+.week-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
 
-.calendar-table th,
-.month-table th {
+.week-table th {
   font-size: 0.6875rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  padding: 0.25rem 0.15rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.week-table td {
+  border: 1px solid var(--color-border-light);
+  padding: 0;
+  text-align: center;
   vertical-align: middle;
-  background-color: var(--color-bg);
-  border-color: var(--color-border-light);
-  padding: 0.5rem;
 }
 
-.calendar-table td,
-.month-table td {
-  border-color: var(--color-border-light);
-}
-
-.sala-header {
-  min-width: 150px;
-  width: 170px;
-  font-size: 0.8125rem;
+.col-hora {
+  width: 78px;
+  min-width: 78px;
+  text-align: right !important;
+  padding: 0.15rem 0.4rem !important;
   background: var(--color-bg) !important;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  letter-spacing: -0.02em;
 }
 
-.sala-header strong {
+.col-day {
+  font-size: 0.6875rem;
+}
+
+.col-today {
+  color: var(--color-primary) !important;
+  background: var(--color-primary-subtle) !important;
+  font-weight: 700 !important;
+}
+
+.col-weekend {
+  color: var(--color-text-muted);
+  background: #f8f9fb;
+}
+
+/* ── Cells ───────────────────────────────────────────── */
+
+.cell-free {
+  background: var(--color-free);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.cell-free:hover {
+  background: var(--color-free-hover);
+}
+
+.cell-occupied {
+  background: var(--color-occupied);
+  cursor: default;
+  padding: 1px 2px !important;
+  overflow: hidden;
+}
+
+.cell-mine {
+  background: var(--color-mine);
+  cursor: pointer;
+  padding: 1px 2px !important;
+  overflow: hidden;
+  transition: background-color 0.1s;
+}
+
+.cell-mine:hover {
+  background: var(--color-mine-hover);
+  box-shadow: inset 0 0 0 2px var(--color-mine-accent);
+}
+
+.cell-act {
+  font-size: 0.5625rem;
   font-weight: 600;
-  font-size: 0.8125rem;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-text);
 }
 
-.sala-header small {
-  font-size: 0.6875rem;
+.cell-name {
+  font-size: 0.5rem;
+  line-height: 1;
   color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.calendar-cell {
-  height: 64px;
-  vertical-align: middle;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.12s ease;
-  font-size: 0.75rem;
-  position: relative;
-}
+.cell-occupied .cell-act { color: var(--color-occupied-accent); }
+.cell-mine .cell-act { color: var(--color-mine-accent); }
 
-.cell-free { background-color: var(--color-free); }
-.cell-free:hover { background-color: var(--color-free-hover); }
-.cell-free small { color: var(--color-free-accent); font-weight: 500; }
-
-.cell-occupied { background-color: var(--color-occupied); cursor: default; }
-.cell-occupied small { color: var(--color-occupied-accent); }
-.cell-occupied strong { color: var(--color-text); font-weight: 600; font-size: 0.6875rem; }
-
-.cell-mine { background-color: var(--color-mine); cursor: pointer; }
-.cell-mine:hover { background-color: var(--color-mine-hover); box-shadow: inset 0 0 0 2px var(--color-mine-accent); }
-.cell-mine small { color: var(--color-mine-accent); }
-.cell-mine strong { color: var(--color-text); font-weight: 600; font-size: 0.6875rem; }
-
-#calendar-grid h5 { font-size: 0.9375rem; font-weight: 600; }
-#calendar-grid h5 small { font-weight: 400; color: var(--color-text-muted); }
-
-/* ── Selection States (unified base) ────────────────── */
-
-.cell-highlight {
-  box-shadow: inset 0 0 0 1px;
-}
+/* ── Selection States ────────────────────────────────── */
 
 .cell-selected {
-  background-color: var(--color-selected) !important;
-  border: 2px solid var(--color-selected-border) !important;
-  box-shadow: inset 0 0 0 1px var(--color-selected-border);
+  background: var(--color-selected) !important;
+  box-shadow: inset 0 0 0 2px var(--color-selected-border);
 }
 
-.cell-selected:hover { background-color: #bfdbfe !important; }
+.cell-selected:hover { background: #bfdbfe !important; }
 
 .cell-cancel-selected {
-  background-color: var(--color-cancel-selected) !important;
-  border: 2px solid var(--color-cancel-selected-border) !important;
-  box-shadow: inset 0 0 0 1px var(--color-cancel-selected-border);
+  background: var(--color-cancel-selected) !important;
+  box-shadow: inset 0 0 0 2px var(--color-cancel-selected-border);
 }
 
-.cell-cancel-selected:hover { background-color: #fecaca !important; }
+.cell-cancel-selected:hover { background: #fecaca !important; }
 
 /* ── Selection Bars ──────────────────────────────────── */
 
@@ -357,11 +414,12 @@ small { font-size: 0.8125em; }
   top: 0;
   z-index: 1050;
   border-radius: var(--radius-md);
-  padding: 0.625rem 1rem;
-  margin-bottom: 0.75rem;
+  padding: 0.375rem 0.75rem;
+  margin-bottom: 0.375rem;
   box-shadow: var(--shadow-md);
-  font-size: 0.8125rem;
-  line-height: 1.6;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  flex-shrink: 0;
 }
 
 .selection-bar {
@@ -376,66 +434,9 @@ small { font-size: 0.8125em; }
 
 .selection-bar .btn,
 .cancel-selection-bar .btn {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 500;
-  padding: 0.25rem 0.75rem;
-}
-
-/* ── Month View ──────────────────────────────────────── */
-
-.month-cell {
-  vertical-align: top;
-  height: 108px;
-  padding: 0.375rem 0.5rem !important;
-  cursor: pointer;
-  transition: background-color 0.12s;
-  background: var(--color-surface);
-}
-
-.month-cell:hover { background-color: #f1f5f9; }
-
-.month-cell-empty {
-  background-color: var(--color-bg);
-  cursor: default;
-}
-.month-cell-empty:hover { background-color: var(--color-bg); }
-
-.month-cell-today {
-  border: 2px solid var(--color-primary) !important;
-  background-color: var(--color-primary-subtle);
-}
-
-.month-day-number {
-  font-weight: 700;
-  font-size: 0.875rem;
-  color: var(--color-text);
-  margin-bottom: 3px;
-}
-
-.month-day-content { font-size: 0.6875rem; }
-
-.month-lab-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 3px;
-}
-
-.month-lab-name {
-  flex-shrink: 0;
-  width: 50px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.625rem;
-  color: var(--color-text-secondary);
-}
-
-.month-progress {
-  flex-grow: 1;
-  height: 5px !important;
-  border-radius: 3px;
-  background-color: var(--color-border-light);
+  padding: 0.15rem 0.5rem;
 }
 
 /* ── Modals ──────────────────────────────────────────── */
@@ -447,7 +448,7 @@ small { font-size: 0.8125em; }
 }
 
 .modal-header {
-  padding: 1rem 1.25rem;
+  padding: 0.875rem 1.25rem;
   border-bottom: 1px solid var(--color-border-light);
 }
 
@@ -486,7 +487,7 @@ small { font-size: 0.8125em; }
   transition: all 0.12s ease;
 }
 
-.btn-sm { font-size: 0.75rem; padding: 0.3rem 0.625rem; }
+.btn-sm { font-size: 0.6875rem; padding: 0.2rem 0.5rem; }
 
 .btn-primary { background: var(--color-primary); border-color: var(--color-primary); }
 .btn-primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
@@ -514,8 +515,8 @@ small { font-size: 0.8125em; }
 }
 
 .form-control-sm, .form-select-sm {
-  font-size: 0.8125rem;
-  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.4rem;
 }
 
 .form-label {
@@ -539,8 +540,8 @@ small { font-size: 0.8125em; }
 
 #toast-container {
   position: fixed;
-  top: calc(var(--navbar-height) + 12px);
-  right: 16px;
+  top: calc(var(--navbar-height) + 8px);
+  right: 12px;
   z-index: 1100;
 }
 
@@ -552,8 +553,9 @@ small { font-size: 0.8125em; }
 
 /* ── Mis Reservas ────────────────────────────────────── */
 
-#view-mis-reservas h4 { font-size: 1.0625rem; font-weight: 600; }
-#my-email-display { font-weight: 500; font-size: 0.8125rem; color: var(--color-text-muted); }
+#view-mis-reservas { overflow-y: auto; }
+#view-mis-reservas h4 { font-size: 1rem; font-weight: 600; }
+#my-email-display { font-weight: 500; font-size: 0.75rem; color: var(--color-text-muted); }
 
 #my-reservations-list .card { transition: box-shadow 0.12s; }
 #my-reservations-list .card:hover { box-shadow: var(--shadow-md); }
@@ -571,34 +573,27 @@ small { font-size: 0.8125em; }
 .spinner-border { width: 1.5rem; height: 1.5rem; border-width: 2px; color: var(--color-primary); }
 .alert { font-size: 0.8125rem; border-radius: var(--radius-md); }
 .table { margin-bottom: 0; }
-.table-bordered > :not(caption) > * > * { border-color: var(--color-border-light); }
-.progress { background-color: var(--color-border-light); }
-.progress-bar.bg-success { background-color: #22c55e !important; }
-.progress-bar.bg-warning { background-color: #f59e0b !important; }
-.progress-bar.bg-danger  { background-color: #ef4444 !important; }
 
 /* ── Responsive ──────────────────────────────────────── */
 
+@media (max-width: 1200px) {
+  .col-hora { width: 65px; min-width: 65px; font-size: 0.625rem; }
+  .week-table th { font-size: 0.625rem; }
+}
+
 @media (max-width: 992px) {
-  .container-fluid.mt-3 { padding-left: 1rem; padding-right: 1rem; }
-  .date-nav h5 { min-width: 200px; font-size: 0.8125rem; }
+  .sala-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    overflow-y: auto;
+  }
+  .sala-panel { min-height: 300px; }
+  .col-hora { width: 72px; min-width: 72px; }
+  body { overflow: auto; }
 }
 
 @media (max-width: 768px) {
-  .calendar-cell { height: 52px; font-size: 0.6875rem; }
-  .sala-header { min-width: 100px; width: 110px; }
-  .sala-header strong { font-size: 0.75rem; }
-  .date-nav { gap: 0.25rem; }
-  .date-nav h5 { font-size: 0.75rem; min-width: auto; }
-  .month-cell { height: 76px; padding: 2px 3px !important; }
-  .month-lab-name { display: none; }
-  .month-day-number { font-size: 0.75rem; }
-  .selection-bar, .cancel-selection-bar { font-size: 0.75rem; padding: 0.5rem 0.75rem; }
-  .container-fluid.mt-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
-}
-
-@media (max-width: 480px) {
-  .date-nav { flex-wrap: wrap; }
-  .calendar-cell { height: 44px; font-size: 0.625rem; }
-  .sala-header { min-width: 80px; width: 90px; font-size: 0.6875rem; }
+  .date-nav { gap: 0.25rem; flex-wrap: wrap; }
+  .date-nav h5 { font-size: 0.6875rem; }
+  .selection-bar, .cancel-selection-bar { font-size: 0.6875rem; padding: 0.3rem 0.5rem; }
 }
