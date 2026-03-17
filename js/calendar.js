@@ -7,6 +7,7 @@ const Calendar = {
   currentDate: new Date(),
   salas: [],
   bloques: [],
+  equipos: [],
   allReservations: [],
   loadedYear: null,
   refreshInterval: null,
@@ -52,6 +53,7 @@ const Calendar = {
     if (initRes.ok) {
       this.salas = initRes.data.salas;
       this.bloques = initRes.data.bloques;
+      this.equipos = initRes.data.equipos || [];
     }
 
     if (compactRes.ok) {
@@ -123,7 +125,7 @@ const Calendar = {
   // ── Compact data expansion ─────────────────────────────
 
   expandCompact(c) {
-    return c.r.map(([id, s, doy, b, ui, ai, gi]) => ({
+    return c.r.map(([id, s, doy, b, ui, ai, gi, ci, eq]) => ({
       ID: id,
       SalaID: s,
       Fecha: this.doyToDate(c.y, doy),
@@ -131,7 +133,9 @@ const Calendar = {
       Email: c.u[ui][0],
       Nombre: c.u[ui][1],
       Actividad: c.a[ai],
-      Recurrencia: gi < 0 ? '' : c.g[gi]
+      Recurrencia: gi < 0 ? '' : c.g[gi],
+      Comentarios: ci < 0 ? '' : (c.c ? c.c[ci] : ''),
+      Equipos: eq || ''
     }));
   },
 

@@ -106,6 +106,7 @@ const App = {
     document.querySelector(`[data-nav="${name}"]`)?.classList.add('active');
 
     if (name === 'mis-reservas') this.loadMyReservations();
+    if (name === 'resumen-diario') this.loadDailySummary();
   },
 
   // ── Modal de Reserva ──────────────────────────────────
@@ -128,6 +129,8 @@ const App = {
     document.getElementById('res-slots-info').innerHTML = infoHtml;
     document.getElementById('res-user-info').textContent = this.currentUser.Nombre + ' (' + this.currentUser.Email + ')';
     document.getElementById('res-actividad').value = '';
+    document.getElementById('res-comentarios').value = '';
+    this.populateEquipmentCheckboxes();
 
     // Recurrence
     document.getElementById('res-recurrence-check').checked = false;
@@ -178,12 +181,20 @@ const App = {
     btn.disabled = true;
     btn.textContent = 'Reservando...';
 
+    const comentarios = document.getElementById('res-comentarios').value.trim();
+    const equipos = [];
+    document.querySelectorAll('#res-equipos-container input[type="checkbox"]:checked').forEach(cb => {
+      equipos.push(Number(cb.value));
+    });
+
     try {
       const res = await Api.createReservation({
         slots: allSlots,
         email: this.currentUser.Email,
         actividad,
-        recurrenciaGrupo
+        recurrenciaGrupo,
+        comentarios,
+        equipos
       });
 
       if (res.ok) {
@@ -342,6 +353,109 @@ const App = {
     } else {
       this.showToast(res.error || 'Error', 'error');
     }
+  },
+
+  // ── Equipment Checkboxes ────────────────────────────
+
+  populateEquipmentCheckboxes() {
+    const container = document.getElementById('res-equipos-container');
+    if (Calendar.equipos.length === 0) {
+      container.innerHTML = '<small class="text-muted">No hay equipos disponibles</small>';
+      return;
+    }
+    container.innerHTML = Calendar.equipos.map(eq =>
+      `<div class="form-check">
+        <input class="form-check-input" type="checkbox" value="${eq.ID}" id="eq-${eq.ID}">
+        <label class="form-check-label" for="eq-${eq.ID}">
+          ${eq.Nombre} <small class="text-muted">(${eq.Descripcion || ''} — ${eq.Cantidad} disponibles)</small>
+        </label>
+      </div>`
+    ).join('');
+  },
+
+  // ── Resumen Diario ──────────────────────────────────
+
+  loadDailySummary() {
+    const picker = document.getElementById('summary-date-picker');
+    if (!picker.value) {
+      picker.value = Calendar.formatDate(new Date());
+    }
+    picker.onchange = () => this.renderDailySummary(picker.value);
+    this.renderDailySummary(picker.value);
+  },
+
+  renderDailySummary(dateStr) {
+    const container = document.getElementById('daily-summary-content');
+    const reservas = Calendar.allReservations.filter(r => r.Fecha === dateStr);
+
+    if (reservas.length === 0) {
+      container.innerHTML = '<div class="summary-empty">No hay reservas para esta fecha.</div>';
+      return;
+    }
+
+    // Group by BloqueID
+    const byBloque = {};
+    reservas.forEach(r => {
+      if (!byBloque[r.BloqueID]) byBloque[r.BloqueID] = [];
+      byBloque[r.BloqueID].push(r);
+    });
+
+    const bloqueIds = Object.keys(byBloque).map(Number).sort((a, b) => a - b);
+    const h = [];
+
+    bloqueIds.forEach(bid => {
+      const bloque = Calendar.bloques.find(b => b.ID === bid);
+      const bloqueLabel = bloque ? bloque.Etiqueta : 'Bloque ' + bid;
+      const items = byBloque[bid].sort((a, b) => a.SalaID - b.SalaID);
+
+      // Equipment totals for this block
+      const eqTotals = {};
+      items.forEach(r => {
+        if (r.Equipos) {
+          r.Equipos.split(',').forEach(eqId => {
+            const id = eqId.trim();
+            if (!id) return;
+            const eq = Calendar.equipos.find(e => String(e.ID) === id);
+            const name = eq ? eq.Nombre : 'Equipo ' + id;
+            eqTotals[name] = (eqTotals[name] || 0) + 1;
+          });
+        }
+      });
+
+      h.push('<div class="summary-block">');
+      h.push(`<div class="summary-block-header">${bloqueLabel}</div>`);
+
+      const eqKeys = Object.keys(eqTotals);
+      if (eqKeys.length > 0) {
+        const eqText = eqKeys.map(k => eqTotals[k] + ' ' + k).join(', ');
+        h.push(`<div class="summary-equipment-totals">Equipos necesarios: ${eqText}</div>`);
+      }
+
+      h.push('<table class="summary-table">');
+      h.push('<thead><tr><th>Sala</th><th>Actividad</th><th>Persona</th><th>Comentarios</th><th>Equipos</th></tr></thead>');
+      h.push('<tbody>');
+
+      items.forEach(r => {
+        const sala = Calendar.salas.find(s => s.ID === r.SalaID);
+        const salaName = sala ? sala.Nombre : 'Sala ' + r.SalaID;
+        const eqNames = r.Equipos ? r.Equipos.split(',').map(id => {
+          const eq = Calendar.equipos.find(e => String(e.ID) === id.trim());
+          return eq ? eq.Nombre : '';
+        }).filter(Boolean).join(', ') : '-';
+
+        h.push(`<tr>
+          <td><strong>${salaName}</strong></td>
+          <td>${r.Actividad || '-'}</td>
+          <td>${r.Nombre}</td>
+          <td>${r.Comentarios || '-'}</td>
+          <td>${eqNames}</td>
+        </tr>`);
+      });
+
+      h.push('</tbody></table></div>');
+    });
+
+    container.innerHTML = h.join('');
   },
 
   // ── Toast ─────────────────────────────────────────────

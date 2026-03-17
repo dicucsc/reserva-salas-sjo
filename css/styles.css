@@ -189,7 +189,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .date-nav h5 {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -258,7 +258,7 @@ h1, h2, h3, h4, h5, h6 {
   background: #1e293b;
   color: #fff;
   padding: 0.3rem 0.625rem;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -281,7 +281,7 @@ h1, h2, h3, h4, h5, h6 {
   height: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .week-table thead {
@@ -291,7 +291,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .week-table th {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--color-text-secondary);
   background: var(--color-bg);
@@ -314,7 +314,7 @@ h1, h2, h3, h4, h5, h6 {
   text-align: right !important;
   padding: 0.15rem 0.4rem !important;
   background: var(--color-bg) !important;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text-secondary);
   white-space: nowrap;
@@ -369,7 +369,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .cell-act {
-  font-size: 0.5625rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   line-height: 1.15;
   overflow: hidden;
@@ -379,7 +379,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .cell-name {
-  font-size: 0.5rem;
+  font-size: 0.625rem;
   line-height: 1;
   color: var(--color-text-muted);
   overflow: hidden;
@@ -573,6 +573,67 @@ h1, h2, h3, h4, h5, h6 {
 .spinner-border { width: 1.5rem; height: 1.5rem; border-width: 2px; color: var(--color-primary); }
 .alert { font-size: 0.8125rem; border-radius: var(--radius-md); }
 .table { margin-bottom: 0; }
+
+/* ── Resumen Diario ──────────────────────────────────── */
+
+#view-resumen-diario { overflow-y: auto; }
+#view-resumen-diario h4 { font-size: 1rem; font-weight: 600; }
+
+.summary-block {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.summary-block-header {
+  background: #1e293b;
+  color: #fff;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.summary-equipment-totals {
+  background: var(--color-primary-subtle);
+  border-bottom: 1px solid var(--color-primary-border);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.summary-table th {
+  background: var(--color-bg);
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.summary-table td {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: top;
+}
+
+.summary-table tr:last-child td { border-bottom: none; }
+
+.summary-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
 
 /* ── Responsive ──────────────────────────────────────── */
 

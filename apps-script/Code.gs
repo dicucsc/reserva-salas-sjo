@@ -8,6 +8,7 @@ const SHEET_SALAS = 'Salas';
 const SHEET_BLOQUES = 'Bloques';
 const SHEET_RESERVAS = 'Reservas';
 const SHEET_USUARIOS = 'Usuarios';
+const SHEET_EQUIPOS = 'Equipos';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ function invalidateCache() {
   const cache = CacheService.getScriptCache();
   const now = new Date();
   const year = now.getFullYear();
-  const keys = ['data_salas', 'data_bloques', 'data_usuarios',
+  const keys = ['data_salas', 'data_bloques', 'data_usuarios', 'data_equipos',
                 'year_compact_' + year, 'year_compact_' + (year + 1)];
   cache.removeAll(keys);
 }
@@ -114,9 +115,11 @@ function buildYearCompact(year) {
   const userMap = new Map();
   const actMap = new Map();
   const groupMap = new Map();
+  const commentMap = new Map();
   const users = [];
   const activities = [];
   const groups = [];
+  const comments = [];
 
   yearReservations.forEach(r => {
     const email = String(r.Email || '').trim().toLowerCase();
@@ -138,9 +141,15 @@ function buildYearCompact(year) {
       groupMap.set(rec, groups.length);
       groups.push(rec);
     }
+
+    const comment = String(r.Comentarios || '');
+    if (comment && !commentMap.has(comment)) {
+      commentMap.set(comment, comments.length);
+      comments.push(comment);
+    }
   });
 
-  // Build compact records
+  // Build compact records: [id, salaId, doy, bloqueId, userIdx, actIdx, groupIdx, commentIdx, equipStr]
   const records = yearReservations.map(r => {
     const fecha = r.Fecha instanceof Date ? r.Fecha : new Date(formatDate(r.Fecha) + 'T00:00:00');
     const startOfYear = new Date(year, 0, 1);
@@ -149,6 +158,8 @@ function buildYearCompact(year) {
     const email = String(r.Email || '').trim().toLowerCase();
     const act = String(r.Actividad || '');
     const rec = String(r.Recurrencia || '');
+    const comment = String(r.Comentarios || '');
+    const equip = String(r.Equipos || '');
 
     return [
       Number(r.ID),
@@ -157,7 +168,9 @@ function buildYearCompact(year) {
       Number(r.BloqueID),
       userMap.get(email),
       actMap.get(act),
-      rec ? groupMap.get(rec) : -1
+      rec ? groupMap.get(rec) : -1,
+      comment ? commentMap.get(comment) : -1,
+      equip
     ];
   });
 
@@ -166,6 +179,7 @@ function buildYearCompact(year) {
     u: users,
     a: activities,
     g: groups,
+    c: comments,
     r: records
   };
 }
@@ -180,7 +194,8 @@ function doGet(e) {
       case 'fullInit': {
         const salas = getCached('data_salas', 600, () => sheetToObjects(getSheet(SHEET_SALAS)));
         const bloques = getCached('data_bloques', 600, () => processBlocks(sheetToObjects(getSheet(SHEET_BLOQUES))));
-        return jsonResponse({ ok: true, data: { salas, bloques } });
+        const equipos = getCached('data_equipos', 600, () => sheetToObjects(getSheet(SHEET_EQUIPOS)));
+        return jsonResponse({ ok: true, data: { salas, bloques, equipos } });
       }
 
       case 'login': {
@@ -228,7 +243,7 @@ function doPost(e) {
 // ── Crear reserva ───────────────────────────────────────────
 
 function createReservation(body) {
-  const { slots, email, actividad, recurrenciaGrupo } = body;
+  const { slots, email, actividad, recurrenciaGrupo, comentarios, equipos } = body;
 
   if (!slots || !slots.length || !email)
     return { ok: false, error: 'Faltan campos obligatorios' };
@@ -251,9 +266,10 @@ function createReservation(body) {
     const resSheet = getSheet(SHEET_RESERVAS);
     const existentes = sheetToObjects(resSheet);
 
-    // Cache salas/bloques once
+    // Cache salas/bloques/equipos once
     const salas = getCached('data_salas', 600, () => sheetToObjects(getSheet(SHEET_SALAS)));
     const bloques = getCached('data_bloques', 600, () => processBlocks(sheetToObjects(getSheet(SHEET_BLOQUES))));
+    const equiposCatalog = getCached('data_equipos', 600, () => sheetToObjects(getSheet(SHEET_EQUIPOS)));
 
     // Verificar que ningún slot esté ocupado
     for (const s of slots) {
@@ -268,6 +284,37 @@ function createReservation(body) {
       }
     }
 
+    // Validar disponibilidad de equipos
+    const equiposArr = Array.isArray(equipos) ? equipos : [];
+    if (equiposArr.length > 0) {
+      // For each unique (fecha, bloqueId) in slots, check equipment availability
+      const slotGroups = {};
+      slots.forEach(s => {
+        const key = s.fecha + '|' + s.bloqueId;
+        if (!slotGroups[key]) slotGroups[key] = { fecha: s.fecha, bloqueId: s.bloqueId };
+      });
+
+      for (const sg of Object.values(slotGroups)) {
+        for (const eqId of equiposArr) {
+          const equipo = equiposCatalog.find(e => String(e.ID) === String(eqId));
+          if (!equipo) return { ok: false, error: 'Equipo no encontrado: ' + eqId };
+
+          const cantidadTotal = Number(equipo.Cantidad);
+          // Count how many of this equipment are already reserved for this fecha+bloque
+          const usados = existentes.filter(r =>
+            formatDate(r.Fecha) === sg.fecha &&
+            String(r.BloqueID) === String(sg.bloqueId) &&
+            String(r.Equipos || '').split(',').map(x => x.trim()).includes(String(eqId))
+          ).length;
+
+          if (usados >= cantidadTotal) {
+            const bloque = bloques.find(b => String(b.ID) === String(sg.bloqueId));
+            return { ok: false, error: 'Equipo "' + equipo.Nombre + '" no disponible: ' + sg.fecha + ' ' + (bloque ? bloque.Etiqueta : 'Bloque ' + sg.bloqueId) };
+          }
+        }
+      }
+    }
+
     let maxId = existentes.length > 0
       ? Math.max(...existentes.map(r => Number(r.ID)))
       : 0;
@@ -275,18 +322,20 @@ function createReservation(body) {
     const createdIds = [];
     const now = new Date().toISOString();
     const rows = [];
+    const comentarioStr = comentarios || '';
+    const equiposStr = equiposArr.join(',');
 
     for (const s of slots) {
       maxId++;
-      rows.push([maxId, Number(s.salaId), s.fecha, Number(s.bloqueId), email, nombreReal, actividad || '', recurrenciaGrupo || '', now]);
+      rows.push([maxId, Number(s.salaId), s.fecha, Number(s.bloqueId), email, nombreReal, actividad || '', recurrenciaGrupo || '', now, comentarioStr, equiposStr]);
       createdIds.push(maxId);
     }
 
     // Batch write
     const lastRow = resSheet.getLastRow();
-    resSheet.getRange(lastRow + 1, 1, rows.length, 9).setValues(rows);
+    resSheet.getRange(lastRow + 1, 1, rows.length, 11).setValues(rows);
 
-    emailData = buildEmailData(slots, salas, bloques, actividad);
+    emailData = buildEmailData(slots, salas, bloques, actividad, comentarios, equiposArr, equiposCatalog);
     result = { ok: true, data: { ids: createdIds, count: createdIds.length } };
   } finally {
     lock.releaseLock();
@@ -300,7 +349,11 @@ function createReservation(body) {
   return result;
 }
 
-function buildEmailData(slots, salas, bloques, actividad) {
+function buildEmailData(slots, salas, bloques, actividad, comentarios, equiposArr, equiposCatalog) {
+  const equiposNombres = (equiposArr || []).map(eqId => {
+    const eq = (equiposCatalog || []).find(e => String(e.ID) === String(eqId));
+    return eq ? eq.Nombre : 'Equipo ' + eqId;
+  });
   return {
     slots: slots.map(s => {
       const sala = salas.find(l => String(l.ID) === String(s.salaId));
@@ -311,7 +364,9 @@ function buildEmailData(slots, salas, bloques, actividad) {
         bloque: bloque ? bloque.Etiqueta : 'Bloque ' + s.bloqueId
       };
     }),
-    actividad
+    actividad,
+    comentarios: comentarios || '',
+    equipos: equiposNombres
   };
 }
 
@@ -438,8 +493,10 @@ function sendConfirmationEmail(email, nombre, data) {
   data.slots.forEach(s => rows.push([s.sala, s.fecha, s.bloque]));
 
   const actLine = '<p><strong>Actividad:</strong> ' + (data.actividad || '-') + '</p>';
+  const commentLine = data.comentarios ? '<p><strong>Comentarios:</strong> ' + data.comentarios + '</p>' : '';
+  const equipLine = data.equipos && data.equipos.length > 0 ? '<p><strong>Equipos:</strong> ' + data.equipos.join(', ') + '</p>' : '';
   const tableHtml = buildEmailHtml('Reserva Confirmada', '#059669', nombre, rows);
-  const html = tableHtml.replace('</table>', '</table>' + actLine);
+  const html = tableHtml.replace('</table>', '</table>' + actLine + commentLine + equipLine);
 
   MailApp.sendEmail({
     to: email,
