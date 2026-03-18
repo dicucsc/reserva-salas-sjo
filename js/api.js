@@ -3,7 +3,7 @@
    Sistema de Reserva de Salas SJO
    ============================================ */
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbyA2lIOB_7CIi6-Y0TZR3Yx1fErDEZy51x50e1ck9aBVTSB1rs_AFcinyIfXzsC15iV/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwiGvbGqqUYi6_8Z6xjJC1jvFVUWdPJdS4ZQZclYWdJoIQda4fLC-9_rOZfZp6l_eKR/exec';
 
 const Api = {
   async _get(params) {
