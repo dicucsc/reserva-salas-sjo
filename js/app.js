@@ -1,6 +1,6 @@
 /* ============================================
    App Principal - Autenticación, Navegación y Reservas
-   Sistema de Reserva de Salas SJO
+   Sistema de Reserva de Salas SJO (Azure)
    ============================================ */
 
 const App = {
@@ -16,22 +16,11 @@ const App = {
       };
     });
 
-    document.getElementById('btn-login').onclick = () => this.login();
-    document.getElementById('login-email').onkeydown = (e) => {
-      if (e.key === 'Enter') document.getElementById('login-password').focus();
-    };
-    document.getElementById('login-password').onkeydown = (e) => {
-      if (e.key === 'Enter') this.login();
-    };
+    document.getElementById('btn-login').onclick = () => Auth.login();
     document.getElementById('btn-logout').onclick = () => this.logout();
 
-    const savedEmail = localStorage.getItem('sjo_email');
-    const savedPass = localStorage.getItem('sjo_password');
-    if (savedEmail && savedPass) {
-      document.getElementById('login-email').value = savedEmail;
-      document.getElementById('login-password').value = savedPass;
-      await this.login(true);
-    }
+    // Try auto-login via SWA auth
+    await this.tryAutoLogin();
   },
 
   // ── Email helper ───────────────────────────────────────
@@ -42,46 +31,32 @@ const App = {
 
   // ── Autenticación ─────────────────────────────────────
 
-  async login(silent) {
-    const email = document.getElementById('login-email').value.trim();
-    const password = document.getElementById('login-password').value;
-    if (!email) {
-      if (!silent) alert('Ingresa tu correo');
-      return;
-    }
-    if (!password) {
-      if (silent) return;
-      alert('Ingresa tu contraseña');
-      return;
-    }
-
-    const btn = document.getElementById('btn-login');
-    btn.disabled = true;
-    btn.textContent = 'Verificando...';
-    document.getElementById('login-error').classList.add('d-none');
-
+  async tryAutoLogin() {
     try {
-      const res = await Api.login(email, password);
+      const principal = await Auth.getUserInfo();
+      if (!principal) return; // Not authenticated, show login screen
+
+      // User is authenticated with Microsoft, get profile from our DB
+      const btn = document.getElementById('btn-login');
+      btn.disabled = true;
+      btn.textContent = 'Verificando...';
+
+      const res = await Api.getUserProfile();
       if (res.ok) {
         this.currentUser = res.data;
-        localStorage.setItem('sjo_email', email);
-        localStorage.setItem('sjo_password', password);
-        localStorage.setItem('sjo_nombre', res.data.Nombre);
         this.showApp();
       } else {
-        if (!silent) {
-          document.getElementById('login-error').textContent = res.error;
-          document.getElementById('login-error').classList.remove('d-none');
-        }
+        // User authenticated with Microsoft but not in our Users table
+        document.getElementById('login-error').textContent = res.error || 'Usuario no registrado';
+        document.getElementById('login-error').classList.remove('d-none');
+        btn.disabled = false;
+        btn.textContent = 'Ingresar con cuenta UCSC';
       }
     } catch (e) {
-      if (!silent) {
-        document.getElementById('login-error').textContent = 'Error de conexión: ' + e.message;
-        document.getElementById('login-error').classList.remove('d-none');
-      }
-    } finally {
+      // Not authenticated or error, show login screen
+      const btn = document.getElementById('btn-login');
       btn.disabled = false;
-      btn.textContent = 'Ingresar';
+      btn.textContent = 'Ingresar con cuenta UCSC';
     }
   },
 
@@ -100,14 +75,10 @@ const App = {
 
   logout() {
     this.currentUser = null;
-    localStorage.removeItem('sjo_email');
-    localStorage.removeItem('sjo_password');
-    localStorage.removeItem('sjo_nombre');
     Calendar.stopAutoRefresh();
     this._modalReservar = null;
     this._modalCancelar = null;
-    document.getElementById('login-screen').classList.remove('d-none');
-    document.getElementById('app-container').classList.add('d-none');
+    Auth.logout();
   },
 
   // ── Navegación ────────────────────────────────────────
@@ -205,7 +176,6 @@ const App = {
     try {
       const res = await Api.createReservation({
         slots: allSlots,
-        email: this.currentUser.Email,
         actividad,
         recurrenciaGrupo,
         comentarios,
@@ -253,7 +223,7 @@ const App = {
     try {
       let errors = [];
       for (const s of this._cancelItems) {
-        const res = await Api.cancelReservation(s.reservaId, this.currentUser.Email);
+        const res = await Api.cancelReservation(s.reservaId);
         if (!res.ok) errors.push(res.error);
       }
 
@@ -347,7 +317,7 @@ const App = {
 
   async cancelSingle(id) {
     if (!confirm('¿Cancelar esta reserva?')) return;
-    const res = await Api.cancelReservation(id, this.currentUser.Email);
+    const res = await Api.cancelReservation(id);
     if (res.ok) {
       this.showToast('Reserva cancelada', 'success');
       this.loadMyReservations();
@@ -360,7 +330,7 @@ const App = {
 
   async cancelRecurrenceGroup(groupId) {
     if (!confirm('¿Cancelar TODAS las reservas de este grupo recurrente?')) return;
-    const res = await Api.cancelRecurrenceGroup(groupId, this.currentUser.Email);
+    const res = await Api.cancelRecurrenceGroup(groupId);
     if (res.ok) {
       this.showToast(`${res.data.canceladas} reservas canceladas`, 'success');
       this.loadMyReservations();
@@ -426,7 +396,6 @@ const App = {
     try {
       const res = await Api.updateReservation({
         reservaId: this._editReserva.ID,
-        email: this.currentUser.Email,
         actividad: document.getElementById('edit-res-actividad').value.trim(),
         responsable: document.getElementById('edit-res-responsable').value.trim(),
         comentarios: document.getElementById('edit-res-comentarios').value.trim(),

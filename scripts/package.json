@@ -1,0 +1,7 @@
+{
+  "name": "reserva-salas-scripts",
+  "private": true,
+  "dependencies": {
+    "@azure/data-tables": "^13.0.0"
+  }
+}

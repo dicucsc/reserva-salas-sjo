@@ -15,19 +15,19 @@
   <!-- Pantalla de Login -->
   <div id="login-screen" class="d-flex align-items-center justify-content-center" style="min-height:100vh">
     <div class="card" style="width:400px; max-width:95%">
-      <div class="card-body">
-        <h4 class="card-title text-center mb-1">Reserva de Salas</h4>
-        <p class="text-muted text-center mb-4" style="font-size:0.8125rem">Ingresa con tu correo institucional</p>
-        <div class="mb-3">
-          <label class="form-label" for="login-email">Correo electrónico</label>
-          <input type="email" class="form-control" id="login-email" placeholder="tu@institucion.edu" autofocus>
-        </div>
-        <div class="mb-3">
-          <label class="form-label" for="login-password">Contraseña</label>
-          <input type="password" class="form-control" id="login-password" placeholder="Tu contraseña">
-        </div>
+      <div class="card-body text-center">
+        <h4 class="card-title mb-1">Reserva de Salas</h4>
+        <p class="text-muted mb-4" style="font-size:0.8125rem">Ingresa con tu cuenta institucional @ucsc.cl</p>
         <div id="login-error" class="alert alert-danger py-2 d-none"></div>
-        <button id="btn-login" class="btn btn-primary w-100">Ingresar</button>
+        <button id="btn-login" class="btn btn-primary w-100 btn-login-microsoft">
+          <svg width="20" height="20" viewBox="0 0 21 21" style="margin-right:8px;vertical-align:middle">
+            <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+            <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+            <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+            <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+          </svg>
+          Ingresar con cuenta UCSC
+        </button>
       </div>
     </div>
   </div>
@@ -252,6 +252,7 @@
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/api.js"></script>
   <script src="js/calendar.js"></script>
   <script src="js/app.js"></script>
