@@ -9,6 +9,7 @@ const SHEET_BLOQUES = 'Bloques';
 const SHEET_RESERVAS = 'Reservas';
 const SHEET_USUARIOS = 'Usuarios';
 const SHEET_EQUIPOS = 'Equipos';
+const SHEET_RESERVA_EQUIPOS = 'Reserva Equipos';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -91,6 +92,25 @@ function validateUser(email) {
   return users.find(u => String(u.Email).trim().toLowerCase() === normalized) || null;
 }
 
+function loginUser(body) {
+  const { email, password } = body;
+  if (!email) return { ok: false, error: 'Falta el email' };
+  if (!password) return { ok: false, error: 'Falta la contraseña' };
+
+  const users = getCached('data_usuarios', 300, () => sheetToObjects(getSheet(SHEET_USUARIOS)));
+  const normalized = email.trim().toLowerCase();
+  const user = users.find(u => String(u.Email).trim().toLowerCase() === normalized);
+
+  if (!user) return { ok: false, error: 'Usuario no registrado. Contacta al administrador.' };
+  if (String(user.Password || '') !== String(password))
+    return { ok: false, error: 'Contraseña incorrecta' };
+
+  // No enviar password al frontend
+  const safeUser = {};
+  Object.keys(user).forEach(k => { if (k !== 'Password') safeUser[k] = user[k]; });
+  return { ok: true, data: safeUser };
+}
+
 // ── Year Compact ────────────────────────────────────────────
 
 function getYearCompact(year) {
@@ -116,10 +136,12 @@ function buildYearCompact(year) {
   const actMap = new Map();
   const groupMap = new Map();
   const commentMap = new Map();
+  const respMap = new Map();
   const users = [];
   const activities = [];
   const groups = [];
   const comments = [];
+  const responsables = [];
 
   yearReservations.forEach(r => {
     const email = String(r.Email || '').trim().toLowerCase();
@@ -147,9 +169,15 @@ function buildYearCompact(year) {
       commentMap.set(comment, comments.length);
       comments.push(comment);
     }
+
+    const resp = String(r.Responsable || r.Nombre || '');
+    if (!respMap.has(resp)) {
+      respMap.set(resp, responsables.length);
+      responsables.push(resp);
+    }
   });
 
-  // Build compact records: [id, salaId, doy, bloqueId, userIdx, actIdx, groupIdx, commentIdx, equipStr]
+  // Build compact records: [id, salaId, doy, bloqueId, userIdx, actIdx, groupIdx, commentIdx, equipStr, respIdx]
   const records = yearReservations.map(r => {
     const fecha = r.Fecha instanceof Date ? r.Fecha : new Date(formatDate(r.Fecha) + 'T00:00:00');
     const startOfYear = new Date(year, 0, 1);
@@ -160,6 +188,7 @@ function buildYearCompact(year) {
     const rec = String(r.Recurrencia || '');
     const comment = String(r.Comentarios || '');
     const equip = String(r.Equipos || '');
+    const resp = String(r.Responsable || r.Nombre || '');
 
     return [
       Number(r.ID),
@@ -170,7 +199,8 @@ function buildYearCompact(year) {
       actMap.get(act),
       rec ? groupMap.get(rec) : -1,
       comment ? commentMap.get(comment) : -1,
-      equip
+      equip,
+      respMap.get(resp)
     ];
   });
 
@@ -180,6 +210,7 @@ function buildYearCompact(year) {
     a: activities,
     g: groups,
     c: comments,
+    p: responsables,
     r: records
   };
 }
@@ -196,14 +227,6 @@ function doGet(e) {
         const bloques = getCached('data_bloques', 600, () => processBlocks(sheetToObjects(getSheet(SHEET_BLOQUES))));
         const equipos = getCached('data_equipos', 600, () => sheetToObjects(getSheet(SHEET_EQUIPOS)));
         return jsonResponse({ ok: true, data: { salas, bloques, equipos } });
-      }
-
-      case 'login': {
-        const email = e.parameter.email;
-        if (!email) return jsonResponse({ ok: false, error: 'Falta el email' });
-        const user = validateUser(email);
-        if (!user) return jsonResponse({ ok: false, error: 'Usuario no registrado. Contacta al administrador.' });
-        return jsonResponse({ ok: true, data: user });
       }
 
       case 'getYearCompact': {
@@ -226,6 +249,8 @@ function doPost(e) {
     const action = body.action;
 
     switch (action) {
+      case 'login':
+        return jsonResponse(loginUser(body));
       case 'createReservation':
         return jsonResponse(createReservation(body));
       case 'cancelReservation':
@@ -243,7 +268,7 @@ function doPost(e) {
 // ── Crear reserva ───────────────────────────────────────────
 
 function createReservation(body) {
-  const { slots, email, actividad, recurrenciaGrupo, comentarios, equipos } = body;
+  const { slots, email, actividad, recurrenciaGrupo, comentarios, equipos, responsable } = body;
 
   if (!slots || !slots.length || !email)
     return { ok: false, error: 'Faltan campos obligatorios' };
@@ -286,8 +311,9 @@ function createReservation(body) {
 
     // Validar disponibilidad de equipos
     const equiposArr = Array.isArray(equipos) ? equipos : [];
-    if (equiposArr.length > 0) {
-      // For each unique (fecha, bloqueId) in slots, check equipment availability
+    const eqReservasSheet = getSheet(SHEET_RESERVA_EQUIPOS);
+    if (equiposArr.length > 0 && eqReservasSheet) {
+      const eqReservas = sheetToObjects(eqReservasSheet);
       const slotGroups = {};
       slots.forEach(s => {
         const key = s.fecha + '|' + s.bloqueId;
@@ -300,11 +326,10 @@ function createReservation(body) {
           if (!equipo) return { ok: false, error: 'Equipo no encontrado: ' + eqId };
 
           const cantidadTotal = Number(equipo.Cantidad);
-          // Count how many of this equipment are already reserved for this fecha+bloque
-          const usados = existentes.filter(r =>
+          const usados = eqReservas.filter(r =>
             formatDate(r.Fecha) === sg.fecha &&
             String(r.BloqueID) === String(sg.bloqueId) &&
-            String(r.Equipos || '').split(',').map(x => x.trim()).includes(String(eqId))
+            String(r.EquipoID) === String(eqId)
           ).length;
 
           if (usados >= cantidadTotal) {
@@ -314,6 +339,8 @@ function createReservation(body) {
         }
       }
     }
+
+    const responsableStr = responsable || nombreReal;
 
     let maxId = existentes.length > 0
       ? Math.max(...existentes.map(r => Number(r.ID)))
@@ -327,15 +354,33 @@ function createReservation(body) {
 
     for (const s of slots) {
       maxId++;
-      rows.push([maxId, Number(s.salaId), s.fecha, Number(s.bloqueId), email, nombreReal, actividad || '', recurrenciaGrupo || '', now, comentarioStr, equiposStr]);
+      rows.push([maxId, Number(s.salaId), s.fecha, Number(s.bloqueId), email, nombreReal, actividad || '', recurrenciaGrupo || '', now, comentarioStr, equiposStr, responsableStr]);
       createdIds.push(maxId);
     }
 
-    // Batch write
+    // Batch write reservations (12 columns)
     const lastRow = resSheet.getLastRow();
-    resSheet.getRange(lastRow + 1, 1, rows.length, 11).setValues(rows);
+    resSheet.getRange(lastRow + 1, 1, rows.length, 12).setValues(rows);
 
-    emailData = buildEmailData(slots, salas, bloques, actividad, comentarios, equiposArr, equiposCatalog);
+    // Write equipment reservations
+    if (equiposArr.length > 0 && eqReservasSheet) {
+      const eqRows = [];
+      rows.forEach(row => {
+        const resId = row[0];
+        const salaId = row[1];
+        const fecha = row[2];
+        const bloqueId = row[3];
+        const sala = salas.find(l => l.ID === salaId);
+        equiposArr.forEach(eqId => {
+          const equipo = equiposCatalog.find(e => String(e.ID) === String(eqId));
+          eqRows.push([resId, Number(eqId), equipo ? equipo.Nombre : '', fecha, bloqueId, salaId, sala ? sala.Nombre : '', responsableStr]);
+        });
+      });
+      const eqLastRow = eqReservasSheet.getLastRow();
+      eqReservasSheet.getRange(eqLastRow + 1, 1, eqRows.length, 8).setValues(eqRows);
+    }
+
+    emailData = buildEmailData(slots, salas, bloques, actividad, comentarios, equiposArr, equiposCatalog, responsableStr);
     result = { ok: true, data: { ids: createdIds, count: createdIds.length } };
   } finally {
     lock.releaseLock();
@@ -349,7 +394,7 @@ function createReservation(body) {
   return result;
 }
 
-function buildEmailData(slots, salas, bloques, actividad, comentarios, equiposArr, equiposCatalog) {
+function buildEmailData(slots, salas, bloques, actividad, comentarios, equiposArr, equiposCatalog, responsable) {
   const equiposNombres = (equiposArr || []).map(eqId => {
     const eq = (equiposCatalog || []).find(e => String(e.ID) === String(eqId));
     return eq ? eq.Nombre : 'Equipo ' + eqId;
@@ -366,7 +411,8 @@ function buildEmailData(slots, salas, bloques, actividad, comentarios, equiposAr
     }),
     actividad,
     comentarios: comentarios || '',
-    equipos: equiposNombres
+    equipos: equiposNombres,
+    responsable: responsable || ''
   };
 }
 
@@ -421,6 +467,18 @@ function cancelReservation(body) {
     };
 
     resSheet.deleteRow(rowToDelete);
+
+    // Limpiar equipos reservados
+    const eqSheet = getSheet(SHEET_RESERVA_EQUIPOS);
+    if (eqSheet) {
+      const eqData = eqSheet.getDataRange().getValues();
+      for (let j = eqData.length - 1; j >= 1; j--) {
+        if (String(eqData[j][0]) === String(reservaId)) {
+          eqSheet.deleteRow(j + 1);
+        }
+      }
+    }
+
     result = { ok: true };
   } finally {
     lock.releaseLock();
@@ -453,13 +511,28 @@ function cancelRecurrenceGroup(body) {
   try {
     const resSheet = getSheet(SHEET_RESERVAS);
     const data = resSheet.getDataRange().getValues();
+    const deletedIds = [];
     let count = 0;
 
     for (let i = data.length - 1; i >= 1; i--) {
       if (String(data[i][7]) === recurrenciaGrupo &&
           String(data[i][4]).trim().toLowerCase() === email.trim().toLowerCase()) {
+        deletedIds.push(String(data[i][0]));
         resSheet.deleteRow(i + 1);
         count++;
+      }
+    }
+
+    // Limpiar equipos reservados del grupo
+    if (deletedIds.length > 0) {
+      const eqSheet = getSheet(SHEET_RESERVA_EQUIPOS);
+      if (eqSheet) {
+        const eqData = eqSheet.getDataRange().getValues();
+        for (let j = eqData.length - 1; j >= 1; j--) {
+          if (deletedIds.includes(String(eqData[j][0]))) {
+            eqSheet.deleteRow(j + 1);
+          }
+        }
       }
     }
 
@@ -493,10 +566,11 @@ function sendConfirmationEmail(email, nombre, data) {
   data.slots.forEach(s => rows.push([s.sala, s.fecha, s.bloque]));
 
   const actLine = '<p><strong>Actividad:</strong> ' + (data.actividad || '-') + '</p>';
+  const respLine = data.responsable ? '<p><strong>Responsable:</strong> ' + data.responsable + '</p>' : '';
   const commentLine = data.comentarios ? '<p><strong>Comentarios:</strong> ' + data.comentarios + '</p>' : '';
   const equipLine = data.equipos && data.equipos.length > 0 ? '<p><strong>Equipos:</strong> ' + data.equipos.join(', ') + '</p>' : '';
   const tableHtml = buildEmailHtml('Reserva Confirmada', '#059669', nombre, rows);
-  const html = tableHtml.replace('</table>', '</table>' + actLine + commentLine + equipLine);
+  const html = tableHtml.replace('</table>', '</table>' + actLine + respLine + commentLine + equipLine);
 
   MailApp.sendEmail({
     to: email,

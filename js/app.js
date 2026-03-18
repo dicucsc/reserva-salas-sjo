@@ -18,13 +18,18 @@ const App = {
 
     document.getElementById('btn-login').onclick = () => this.login();
     document.getElementById('login-email').onkeydown = (e) => {
+      if (e.key === 'Enter') document.getElementById('login-password').focus();
+    };
+    document.getElementById('login-password').onkeydown = (e) => {
       if (e.key === 'Enter') this.login();
     };
     document.getElementById('btn-logout').onclick = () => this.logout();
 
     const savedEmail = localStorage.getItem('sjo_email');
-    if (savedEmail) {
+    const savedPass = localStorage.getItem('sjo_password');
+    if (savedEmail && savedPass) {
       document.getElementById('login-email').value = savedEmail;
+      document.getElementById('login-password').value = savedPass;
       await this.login(true);
     }
   },
@@ -39,8 +44,14 @@ const App = {
 
   async login(silent) {
     const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
     if (!email) {
       if (!silent) alert('Ingresa tu correo');
+      return;
+    }
+    if (!password) {
+      if (silent) return;
+      alert('Ingresa tu contraseña');
       return;
     }
 
@@ -50,10 +61,11 @@ const App = {
     document.getElementById('login-error').classList.add('d-none');
 
     try {
-      const res = await Api.login(email);
+      const res = await Api.login(email, password);
       if (res.ok) {
         this.currentUser = res.data;
         localStorage.setItem('sjo_email', email);
+        localStorage.setItem('sjo_password', password);
         localStorage.setItem('sjo_nombre', res.data.Nombre);
         this.showApp();
       } else {
@@ -89,6 +101,7 @@ const App = {
   logout() {
     this.currentUser = null;
     localStorage.removeItem('sjo_email');
+    localStorage.removeItem('sjo_password');
     localStorage.removeItem('sjo_nombre');
     Calendar.stopAutoRefresh();
     this._modalReservar = null;
@@ -129,6 +142,7 @@ const App = {
     document.getElementById('res-slots-info').innerHTML = infoHtml;
     document.getElementById('res-user-info').textContent = this.currentUser.Nombre + ' (' + this.currentUser.Email + ')';
     document.getElementById('res-actividad').value = '';
+    document.getElementById('res-responsable').value = this.currentUser.Nombre;
     document.getElementById('res-comentarios').value = '';
     this.populateEquipmentCheckboxes();
 
@@ -181,6 +195,7 @@ const App = {
     btn.disabled = true;
     btn.textContent = 'Reservando...';
 
+    const responsable = document.getElementById('res-responsable').value.trim() || this.currentUser.Nombre;
     const comentarios = document.getElementById('res-comentarios').value.trim();
     const equipos = [];
     document.querySelectorAll('#res-equipos-container input[type="checkbox"]:checked').forEach(cb => {
@@ -194,7 +209,8 @@ const App = {
         actividad,
         recurrenciaGrupo,
         comentarios,
-        equipos
+        equipos,
+        responsable
       });
 
       if (res.ok) {
@@ -432,7 +448,7 @@ const App = {
       }
 
       h.push('<table class="summary-table">');
-      h.push('<thead><tr><th>Sala</th><th>Actividad</th><th>Persona</th><th>Comentarios</th><th>Equipos</th></tr></thead>');
+      h.push('<thead><tr><th>Sala</th><th>Actividad</th><th>Responsable</th><th>Reservado por</th><th>Comentarios</th><th>Equipos</th></tr></thead>');
       h.push('<tbody>');
 
       items.forEach(r => {
@@ -441,13 +457,14 @@ const App = {
         const eqNames = r.Equipos ? r.Equipos.split(',').map(id => {
           const eq = Calendar.equipos.find(e => String(e.ID) === id.trim());
           return eq ? eq.Nombre : '';
-        }).filter(Boolean).join(', ') : '-';
+        }).filter(Boolean).join(', ') : '';
 
         h.push(`<tr>
           <td><strong>${salaName}</strong></td>
-          <td>${r.Actividad || '-'}</td>
-          <td>${r.Nombre}</td>
-          <td>${r.Comentarios || '-'}</td>
+          <td>${r.Actividad || ''}</td>
+          <td>${r.Responsable || r.Nombre}</td>
+          <td><small class="text-muted">${r.Nombre}</small></td>
+          <td>${r.Comentarios || ''}</td>
           <td>${eqNames}</td>
         </tr>`);
       });

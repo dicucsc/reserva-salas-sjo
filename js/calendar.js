@@ -125,7 +125,7 @@ const Calendar = {
   // ── Compact data expansion ─────────────────────────────
 
   expandCompact(c) {
-    return c.r.map(([id, s, doy, b, ui, ai, gi, ci, eq]) => ({
+    return c.r.map(([id, s, doy, b, ui, ai, gi, ci, eq, pi]) => ({
       ID: id,
       SalaID: s,
       Fecha: this.doyToDate(c.y, doy),
@@ -135,7 +135,8 @@ const Calendar = {
       Actividad: c.a[ai],
       Recurrencia: gi < 0 ? '' : c.g[gi],
       Comentarios: ci < 0 ? '' : (c.c ? c.c[ci] : ''),
-      Equipos: eq || ''
+      Equipos: eq || '',
+      Responsable: (c.p && pi != null) ? c.p[pi] : c.u[ui][1]
     }));
   },
 
@@ -482,20 +483,20 @@ const Calendar = {
     const isMine = App.isMyEmail(reserva.Email);
     const cls = isMine ? 'cell-mine' : 'cell-occupied';
     const act = reserva.Actividad || 'Reservado';
-    const name = reserva.Nombre.split(' ')[0];
+    const displayName = (reserva.Responsable || reserva.Nombre || '').split(' ')[0];
 
     if (isMine) {
       const cancelSel = this.isCancelSelected(reserva.ID) ? 'cell-cancel-selected' : '';
       return `<td class="${cls} ${cancelSel}"
         data-cancel-sel="${reserva.ID}"
         data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
-        title="${reserva.Actividad || 'Reservado'} — ${reserva.Nombre} — Click para cancelar">
-        <div class="cell-act">${act}</div><div class="cell-name">${name}</div>
+        title="${act} — Resp: ${reserva.Responsable || reserva.Nombre} — Reservó: ${reserva.Nombre} — Click para cancelar">
+        <div class="cell-act">${act}</div><div class="cell-name">${displayName}</div>
       </td>`;
     }
 
-    return `<td class="${cls}" title="${reserva.Nombre} — ${reserva.Actividad || 'Sin actividad'}">
-      <div class="cell-act">${act}</div><div class="cell-name">${name}</div>
+    return `<td class="${cls}" title="${act} — Resp: ${reserva.Responsable || reserva.Nombre} — Reservó: ${reserva.Nombre}">
+      <div class="cell-act">${act}</div><div class="cell-name">${displayName}</div>
     </td>`;
   },
 

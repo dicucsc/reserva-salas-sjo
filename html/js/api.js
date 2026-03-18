@@ -24,7 +24,7 @@ const Api = {
   },
 
   fullInit: () => Api._get({ action: 'fullInit' }),
-  login: (email) => Api._get({ action: 'login', email }),
+  login: (email, password) => Api._post({ action: 'login', email, password }),
   getYearCompact: (year) => Api._get({ action: 'getYearCompact', year }),
   createReservation: (data) => Api._post({ action: 'createReservation', ...data }),
   cancelReservation: (id, email) => Api._post({ action: 'cancelReservation', reservaId: id, email }),
