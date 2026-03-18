@@ -3,7 +3,7 @@
    Sistema de Reserva de Salas SJO
    ============================================ */
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwiGvbGqqUYi6_8Z6xjJC1jvFVUWdPJdS4ZQZclYWdJoIQda4fLC-9_rOZfZp6l_eKR/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbw8bqY2kKkrmvT2uKH6ICDKoiqgSCezFNhb-TT5C5f6Y-5EvAtrVE-Cf88ZkuqBOkZi/exec';
 
 const Api = {
   async _get(params) {
@@ -28,5 +28,6 @@ const Api = {
   getYearCompact: (year) => Api._get({ action: 'getYearCompact', year }),
   createReservation: (data) => Api._post({ action: 'createReservation', ...data }),
   cancelReservation: (id, email) => Api._post({ action: 'cancelReservation', reservaId: id, email }),
-  cancelRecurrenceGroup: (g, email) => Api._post({ action: 'cancelRecurrenceGroup', recurrenciaGrupo: g, email })
+  cancelRecurrenceGroup: (g, email) => Api._post({ action: 'cancelRecurrenceGroup', recurrenciaGrupo: g, email }),
+  updateReservation: (data) => Api._post({ action: 'updateReservation', ...data })
 };

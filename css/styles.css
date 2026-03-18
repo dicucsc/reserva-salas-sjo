@@ -635,6 +635,17 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.875rem;
 }
 
+.summary-grid {
+  height: auto;
+}
+
+.summary-grid .sala-panel {
+  min-height: auto;
+  overflow: visible;
+}
+
+#editReservationModal .modal-dialog { max-width: 640px; }
+
 /* ── Responsive ──────────────────────────────────────── */
 
 @media (max-width: 1200px) {

@@ -79,7 +79,7 @@
           <span><span class="legend-dot" style="background:var(--color-free-accent)"></span>Libre</span>
           <span><span class="legend-dot" style="background:var(--color-occupied-accent)"></span>Ocupado</span>
           <span><span class="legend-dot" style="background:var(--color-mine-accent)"></span>Mi reserva</span>
-          <span class="legend-hint">Click = seleccionar | Shift+click = rango</span>
+          <span class="legend-hint">Click = seleccionar | Shift+click = rango | Mi reserva: click = editar, shift+click = cancelar</span>
         </div>
 
         <!-- Barra de selección para reservar -->
@@ -202,6 +202,46 @@
           <button id="btn-cancel-confirm" class="btn btn-danger" onclick="App.confirmCancel()">
             Confirmar Cancelación
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Editar Reserva -->
+  <div class="modal fade" id="editReservationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Editar Reserva</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-light mb-3">
+            <div id="edit-res-info"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Actividad / Motivo</label>
+            <input type="text" class="form-control" id="edit-res-actividad">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Responsable</label>
+            <input type="text" class="form-control" id="edit-res-responsable">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Comentarios / Instrucciones</label>
+            <textarea class="form-control" id="edit-res-comentarios" rows="2"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Equipos</label>
+            <div id="edit-res-equipos-container"></div>
+          </div>
+        </div>
+        <div class="modal-footer justify-content-between">
+          <button class="btn btn-danger" onclick="App.deleteFromEdit()">Cancelar Reserva</button>
+          <div>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            <button id="btn-edit-confirm" class="btn btn-primary" onclick="App.saveEditReservation()">Guardar Cambios</button>
+          </div>
         </div>
       </div>
     </div>

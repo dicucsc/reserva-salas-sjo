@@ -9,7 +9,7 @@ const SHEET_BLOQUES = 'Bloques';
 const SHEET_RESERVAS = 'Reservas';
 const SHEET_USUARIOS = 'Usuarios';
 const SHEET_EQUIPOS = 'Equipos';
-const SHEET_RESERVA_EQUIPOS = 'Reserva Equipos';
+const SHEET_RESERVA_EQUIPOS = 'ReservaEquipos';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -257,6 +257,8 @@ function doPost(e) {
         return jsonResponse(cancelReservation(body));
       case 'cancelRecurrenceGroup':
         return jsonResponse(cancelRecurrenceGroup(body));
+      case 'updateReservation':
+        return jsonResponse(updateReservation(body));
       default:
         return jsonResponse({ ok: false, error: 'Acción POST no válida: ' + action });
     }
@@ -380,6 +382,7 @@ function createReservation(body) {
       eqReservasSheet.getRange(eqLastRow + 1, 1, eqRows.length, 8).setValues(eqRows);
     }
 
+    invalidateCache();
     emailData = buildEmailData(slots, salas, bloques, actividad, comentarios, equiposArr, equiposCatalog, responsableStr);
     result = { ok: true, data: { ids: createdIds, count: createdIds.length } };
   } finally {
@@ -479,6 +482,7 @@ function cancelReservation(body) {
       }
     }
 
+    invalidateCache();
     result = { ok: true };
   } finally {
     lock.releaseLock();
@@ -537,9 +541,89 @@ function cancelRecurrenceGroup(body) {
     }
 
     if (count > 0) {
+      invalidateCache();
       return { ok: true, data: { canceladas: count } };
     }
     return { ok: false, error: 'No se encontraron reservas del grupo' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── Editar reserva ──────────────────────────────────────────
+
+function updateReservation(body) {
+  const { reservaId, email, actividad, comentarios, equipos, responsable } = body;
+
+  if (!reservaId || !email)
+    return { ok: false, error: 'Faltan campos obligatorios' };
+
+  const user = validateUser(email);
+  if (!user)
+    return { ok: false, error: 'Usuario no registrado' };
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(10000); } catch (e) {
+    return { ok: false, error: 'Sistema ocupado' };
+  }
+
+  try {
+    const resSheet = getSheet(SHEET_RESERVAS);
+    const data = resSheet.getDataRange().getValues();
+
+    let rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(reservaId) &&
+          String(data[i][4]).trim().toLowerCase() === email.trim().toLowerCase()) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+
+    if (rowIndex === -1)
+      return { ok: false, error: 'Reserva no encontrada o email no coincide' };
+
+    // Actualizar campos: Actividad(7), Comentarios(10), Equipos(11), Responsable(12)
+    if (actividad !== undefined) resSheet.getRange(rowIndex, 7).setValue(actividad || '');
+    if (comentarios !== undefined) resSheet.getRange(rowIndex, 10).setValue(comentarios || '');
+    if (responsable !== undefined) resSheet.getRange(rowIndex, 12).setValue(responsable || '');
+
+    const equiposArr = Array.isArray(equipos) ? equipos : [];
+    resSheet.getRange(rowIndex, 11).setValue(equiposArr.join(','));
+
+    // Actualizar ReservaEquipos
+    const eqSheet = getSheet(SHEET_RESERVA_EQUIPOS);
+    if (eqSheet) {
+      // Eliminar equipos anteriores
+      const eqData = eqSheet.getDataRange().getValues();
+      for (let j = eqData.length - 1; j >= 1; j--) {
+        if (String(eqData[j][0]) === String(reservaId)) {
+          eqSheet.deleteRow(j + 1);
+        }
+      }
+
+      // Re-escribir equipos nuevos
+      if (equiposArr.length > 0) {
+        const equiposCatalog = getCached('data_equipos', 600, () => sheetToObjects(getSheet(SHEET_EQUIPOS)));
+        const salas = getCached('data_salas', 600, () => sheetToObjects(getSheet(SHEET_SALAS)));
+        const fecha = formatDate(data[rowIndex - 1][2]);
+        const bloqueId = data[rowIndex - 1][3];
+        const salaId = data[rowIndex - 1][1];
+        const sala = salas.find(l => l.ID === salaId);
+        const respStr = responsable || data[rowIndex - 1][11] || '';
+
+        const eqRows = [];
+        equiposArr.forEach(eqId => {
+          const equipo = equiposCatalog.find(e => String(e.ID) === String(eqId));
+          eqRows.push([Number(reservaId), Number(eqId), equipo ? equipo.Nombre : '', fecha, bloqueId, salaId, sala ? sala.Nombre : '', respStr]);
+        });
+        const eqLastRow = eqSheet.getLastRow();
+        eqSheet.getRange(eqLastRow + 1, 1, eqRows.length, 8).setValues(eqRows);
+      }
+    }
+
+    invalidateCache();
+    return { ok: true };
   } finally {
     lock.releaseLock();
   }

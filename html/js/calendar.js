@@ -111,7 +111,12 @@ const Calendar = {
         const bloqueId = Number(mineCell.dataset.bloque);
         const sala = this.salas.find(s => s.ID === salaId);
         const bloque = this.bloques.find(b => b.ID === bloqueId);
-        this.toggleCancelCell(reservaId, salaId, sala ? sala.Nombre : 'Sala ' + salaId, fecha, bloqueId, bloque ? bloque.Etiqueta : 'Bloque ' + bloqueId);
+        if (e.shiftKey) {
+          this.toggleCancelCell(reservaId, salaId, sala ? sala.Nombre : 'Sala ' + salaId, fecha, bloqueId, bloque ? bloque.Etiqueta : 'Bloque ' + bloqueId);
+        } else {
+          const reserva = this.getRes(salaId, fecha, bloqueId);
+          if (reserva) App.openEditReservation(reserva);
+        }
       }
     });
   },

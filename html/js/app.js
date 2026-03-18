@@ -371,6 +371,90 @@ const App = {
     }
   },
 
+  // ── Editar Reserva ──────────────────────────────────
+
+  openEditReservation(reserva) {
+    this._editReserva = reserva;
+
+    const sala = Calendar.salas.find(s => s.ID === reserva.SalaID);
+    const bloque = Calendar.bloques.find(b => b.ID === reserva.BloqueID);
+
+    document.getElementById('edit-res-info').innerHTML =
+      `<strong>${sala?.Nombre || 'Sala'}</strong> — ${reserva.Fecha} — ${bloque?.Etiqueta || ''}<br>
+       <small class="text-muted">Reservado por: ${reserva.Nombre}</small>`;
+
+    document.getElementById('edit-res-actividad').value = reserva.Actividad || '';
+    document.getElementById('edit-res-responsable').value = reserva.Responsable || reserva.Nombre || '';
+    document.getElementById('edit-res-comentarios').value = reserva.Comentarios || '';
+    this.populateEditEquipmentCheckboxes(reserva.Equipos);
+
+    if (!this._modalEditar) {
+      this._modalEditar = new bootstrap.Modal(document.getElementById('editReservationModal'));
+    }
+    this._modalEditar.show();
+  },
+
+  populateEditEquipmentCheckboxes(currentEquipos) {
+    const container = document.getElementById('edit-res-equipos-container');
+    const selectedIds = currentEquipos ? currentEquipos.split(',').map(id => id.trim()) : [];
+
+    if (Calendar.equipos.length === 0) {
+      container.innerHTML = '<small class="text-muted">No hay equipos disponibles</small>';
+      return;
+    }
+    container.innerHTML = Calendar.equipos.map(eq => {
+      const checked = selectedIds.includes(String(eq.ID)) ? 'checked' : '';
+      return `<div class="form-check">
+        <input class="form-check-input" type="checkbox" value="${eq.ID}" id="edit-eq-${eq.ID}" ${checked}>
+        <label class="form-check-label" for="edit-eq-${eq.ID}">
+          ${eq.Nombre} <small class="text-muted">(${eq.Descripcion || ''} — ${eq.Cantidad} disponibles)</small>
+        </label>
+      </div>`;
+    }).join('');
+  },
+
+  async saveEditReservation() {
+    const btn = document.getElementById('btn-edit-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    const equipos = [];
+    document.querySelectorAll('#edit-res-equipos-container input[type="checkbox"]:checked').forEach(cb => {
+      equipos.push(Number(cb.value));
+    });
+
+    try {
+      const res = await Api.updateReservation({
+        reservaId: this._editReserva.ID,
+        email: this.currentUser.Email,
+        actividad: document.getElementById('edit-res-actividad').value.trim(),
+        responsable: document.getElementById('edit-res-responsable').value.trim(),
+        comentarios: document.getElementById('edit-res-comentarios').value.trim(),
+        equipos
+      });
+
+      if (res.ok) {
+        this.showToast('Reserva actualizada', 'success');
+        this._modalEditar.hide();
+        Calendar.invalidateCache();
+        Calendar.loadAndRender();
+      } else {
+        this.showToast(res.error || 'Error al actualizar', 'error');
+      }
+    } catch (e) {
+      this.showToast('Error de conexión', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Guardar Cambios';
+    }
+  },
+
+  deleteFromEdit() {
+    if (!confirm('¿Cancelar esta reserva?')) return;
+    this._modalEditar.hide();
+    this.cancelSingle(this._editReserva.ID);
+  },
+
   // ── Equipment Checkboxes ────────────────────────────
 
   populateEquipmentCheckboxes() {
@@ -409,68 +493,66 @@ const App = {
       return;
     }
 
-    // Group by BloqueID
-    const byBloque = {};
-    reservas.forEach(r => {
-      if (!byBloque[r.BloqueID]) byBloque[r.BloqueID] = [];
-      byBloque[r.BloqueID].push(r);
-    });
+    const h = ['<div class="sala-grid summary-grid">'];
 
-    const bloqueIds = Object.keys(byBloque).map(Number).sort((a, b) => a - b);
-    const h = [];
+    Calendar.salas.forEach(sala => {
+      const salaReservas = reservas
+        .filter(r => r.SalaID === sala.ID)
+        .sort((a, b) => a.BloqueID - b.BloqueID);
 
-    bloqueIds.forEach(bid => {
-      const bloque = Calendar.bloques.find(b => b.ID === bid);
-      const bloqueLabel = bloque ? bloque.Etiqueta : 'Bloque ' + bid;
-      const items = byBloque[bid].sort((a, b) => a.SalaID - b.SalaID);
+      h.push('<div class="sala-panel">');
+      h.push(`<div class="sala-panel-header"><span class="sala-panel-name">${sala.Nombre}</span><span class="sala-panel-cap">Cap. ${sala.Capacidad}</span></div>`);
 
-      // Equipment totals for this block
-      const eqTotals = {};
-      items.forEach(r => {
-        if (r.Equipos) {
-          r.Equipos.split(',').forEach(eqId => {
-            const id = eqId.trim();
-            if (!id) return;
-            const eq = Calendar.equipos.find(e => String(e.ID) === id);
-            const name = eq ? eq.Nombre : 'Equipo ' + id;
-            eqTotals[name] = (eqTotals[name] || 0) + 1;
-          });
-        }
-      });
+      if (salaReservas.length === 0) {
+        h.push('<div class="p-3 text-center text-muted" style="font-size:0.8125rem">Sin reservas</div>');
+      } else {
+        h.push('<table class="summary-table">');
+        h.push('<thead><tr><th>Bloque</th><th>Actividad</th><th>Responsable</th><th>Comentarios</th><th>Equipos</th></tr></thead>');
+        h.push('<tbody>');
 
-      h.push('<div class="summary-block">');
-      h.push(`<div class="summary-block-header">${bloqueLabel}</div>`);
+        salaReservas.forEach(r => {
+          const bloque = Calendar.bloques.find(b => b.ID === r.BloqueID);
+          const eqNames = r.Equipos ? r.Equipos.split(',').map(id => {
+            const eq = Calendar.equipos.find(e => String(e.ID) === id.trim());
+            return eq ? eq.Nombre : '';
+          }).filter(Boolean).join(', ') : '';
 
-      const eqKeys = Object.keys(eqTotals);
-      if (eqKeys.length > 0) {
-        const eqText = eqKeys.map(k => eqTotals[k] + ' ' + k).join(', ');
-        h.push(`<div class="summary-equipment-totals">Equipos necesarios: ${eqText}</div>`);
+          h.push(`<tr>
+            <td><strong>${bloque ? bloque.Etiqueta : ''}</strong></td>
+            <td>${r.Actividad || ''}</td>
+            <td>${r.Responsable || r.Nombre}</td>
+            <td>${r.Comentarios || ''}</td>
+            <td>${eqNames}</td>
+          </tr>`);
+        });
+
+        h.push('</tbody></table>');
       }
 
-      h.push('<table class="summary-table">');
-      h.push('<thead><tr><th>Sala</th><th>Actividad</th><th>Responsable</th><th>Reservado por</th><th>Comentarios</th><th>Equipos</th></tr></thead>');
-      h.push('<tbody>');
-
-      items.forEach(r => {
-        const sala = Calendar.salas.find(s => s.ID === r.SalaID);
-        const salaName = sala ? sala.Nombre : 'Sala ' + r.SalaID;
-        const eqNames = r.Equipos ? r.Equipos.split(',').map(id => {
-          const eq = Calendar.equipos.find(e => String(e.ID) === id.trim());
-          return eq ? eq.Nombre : '';
-        }).filter(Boolean).join(', ') : '';
-
-        h.push(`<tr>
-          <td><strong>${salaName}</strong></td>
-          <td>${r.Actividad || ''}</td>
-          <td>${r.Responsable || r.Nombre}</td>
-          <td><small class="text-muted">${r.Nombre}</small></td>
-          <td>${r.Comentarios || ''}</td>
-          <td>${eqNames}</td>
-        </tr>`);
-      });
-
-      h.push('</tbody></table></div>');
+      h.push('</div>');
     });
+
+    h.push('</div>');
+
+    // Totales de equipos del día
+    const eqTotals = {};
+    reservas.forEach(r => {
+      if (r.Equipos) {
+        r.Equipos.split(',').forEach(eqId => {
+          const id = eqId.trim();
+          if (!id) return;
+          const eq = Calendar.equipos.find(e => String(e.ID) === id);
+          const name = eq ? eq.Nombre : 'Equipo ' + id;
+          eqTotals[name] = (eqTotals[name] || 0) + 1;
+        });
+      }
+    });
+
+    const eqKeys = Object.keys(eqTotals);
+    if (eqKeys.length > 0) {
+      const eqText = eqKeys.map(k => eqTotals[k] + ' ' + k).join(', ');
+      h.push(`<div class="summary-equipment-totals mt-3">Total equipos del d\u00eda: ${eqText}</div>`);
+    }
 
     container.innerHTML = h.join('');
   },
