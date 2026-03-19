@@ -126,8 +126,10 @@ const App = {
     // Recurrence
     document.getElementById('res-recurrence-check').checked = false;
     document.getElementById('res-recurrence-options').classList.add('d-none');
-    const until = new Date();
-    until.setDate(until.getDate() + 21);
+    const earliest = selections.map(s => s.fecha).sort()[0];
+    document.getElementById('res-recurrence-from').value = earliest;
+    const until = new Date(earliest + 'T12:00:00');
+    until.setDate(until.getDate() + 28);
     document.getElementById('res-recurrence-until').value = Calendar.formatDate(until);
 
     this._modalReservar.show();
@@ -149,21 +151,32 @@ const App = {
     let recurrenciaGrupo = '';
     const isRecurrent = document.getElementById('res-recurrence-check').checked;
     if (isRecurrent) {
+      const from = document.getElementById('res-recurrence-from').value;
       const until = document.getElementById('res-recurrence-until').value;
+      if (!from) { this.showToast('Selecciona fecha de inicio', 'warning'); return; }
       if (!until) { this.showToast('Selecciona fecha límite', 'warning'); return; }
       recurrenciaGrupo = 'REC-' + Date.now();
+      const fromDate = new Date(from + 'T00:00:00');
       const untilDate = new Date(until + 'T00:00:00');
 
       for (const s of this._reservationSelections) {
         const baseDate = new Date(s.fecha + 'T00:00:00');
-        let nextDate = new Date(baseDate);
-        nextDate.setDate(nextDate.getDate() + 7);
-        while (nextDate <= untilDate) {
-          const y = nextDate.getFullYear();
-          const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-          const d = String(nextDate.getDate()).padStart(2, '0');
-          allSlots.push({ salaId: s.salaId, fecha: `${y}-${m}-${d}`, bloqueId: s.bloqueId });
-          nextDate.setDate(nextDate.getDate() + 7);
+        const dayOfWeek = baseDate.getDay();
+
+        // Find first occurrence on this weekday >= fromDate
+        let cursor = new Date(fromDate);
+        const cursorDay = cursor.getDay();
+        let diff = dayOfWeek - cursorDay;
+        if (diff < 0) diff += 7;
+        cursor.setDate(cursor.getDate() + diff);
+
+        while (cursor <= untilDate) {
+          const dateStr = Calendar.formatDate(cursor);
+          // Skip the originally selected date (already in allSlots)
+          if (dateStr !== s.fecha) {
+            allSlots.push({ salaId: s.salaId, fecha: dateStr, bloqueId: s.bloqueId });
+          }
+          cursor.setDate(cursor.getDate() + 7);
         }
       }
     }
