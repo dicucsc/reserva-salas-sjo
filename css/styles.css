@@ -361,14 +361,14 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   color: var(--color-text-secondary);
   background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
   padding: 0.3rem 0.2rem;
   text-align: center;
   white-space: nowrap;
 }
 
 .week-table td {
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
   padding: 0;
   text-align: center;
   vertical-align: middle;
