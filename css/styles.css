@@ -313,7 +313,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid #b0b8c4;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
