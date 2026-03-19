@@ -304,6 +304,10 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0.35rem 0.4rem !important;
 }
 
+.sala-grid-single .week-table td {
+  height: 2.8rem;
+}
+
 .sala-grid-single .sala-panel-header {
   font-size: 1rem;
   padding: 0.4rem 0.75rem;
@@ -376,6 +380,7 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0;
   text-align: center;
   vertical-align: middle;
+  height: 2.2rem;
 }
 
 .week-table th:last-child,
@@ -390,7 +395,6 @@ h1, h2, h3, h4, h5, h6 {
 .col-hora {
   width: 96px;
   min-width: 96px;
-  text-align: right !important;
   padding: 0.25rem 0.4rem !important;
   background: var(--color-bg) !important;
   font-size: 0.8125rem;
@@ -399,6 +403,14 @@ h1, h2, h3, h4, h5, h6 {
   white-space: nowrap;
   letter-spacing: -0.02em;
   overflow: hidden;
+}
+
+th.col-hora {
+  text-align: center !important;
+}
+
+td.col-hora {
+  text-align: right !important;
 }
 
 .col-day {
