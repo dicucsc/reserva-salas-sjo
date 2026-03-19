@@ -41,7 +41,15 @@ const Api = {
         Auth.login();
         throw new Error('No autenticado');
       }
-      return res.json();
+      const text = await res.text();
+      if (!text) {
+        throw new Error('Respuesta vacía del servidor (HTTP ' + res.status + ')');
+      }
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error('Respuesta no válida (HTTP ' + res.status + '): ' + text.substring(0, 100));
+      }
     } finally {
       clearTimeout(timer);
     }
