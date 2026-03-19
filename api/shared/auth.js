@@ -2,8 +2,8 @@
  * Parse the x-ms-client-principal header injected by Azure Static Web Apps.
  * Returns { userId, userDetails (email), identityProvider, userRoles } or null.
  */
-function getClientPrincipal(request) {
-  const header = request.headers.get('x-ms-client-principal');
+function getClientPrincipal(req) {
+  const header = req.headers['x-ms-client-principal'];
   if (!header) return null;
 
   try {
@@ -17,8 +17,8 @@ function getClientPrincipal(request) {
 /**
  * Extract the authenticated user's email from the SWA auth header.
  */
-function getUserEmail(request) {
-  const principal = getClientPrincipal(request);
+function getUserEmail(req) {
+  const principal = getClientPrincipal(req);
   if (!principal) return null;
   return principal.userDetails ? principal.userDetails.toLowerCase().trim() : null;
 }

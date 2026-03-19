@@ -1,28 +1,21 @@
-const { app } = require('@azure/functions');
 const { getByPartitionRange } = require('../shared/tableClient');
 
-app.http('getYearCompact', {
-  methods: ['GET'],
-  authLevel: 'anonymous',
-  route: 'getYearCompact',
-  handler: async (request, context) => {
-    try {
-      const year = Number(request.query.get('year'));
-      if (!year) {
-        return { jsonBody: { ok: false, error: 'Falta parámetro year' } };
-      }
-
-      const data = await buildYearCompact(year);
-      return { jsonBody: { ok: true, data } };
-    } catch (err) {
-      context.error('getYearCompact error:', err);
-      return { status: 500, jsonBody: { ok: false, error: err.message } };
+module.exports = async function (context, req) {
+  try {
+    const year = Number(req.query.year);
+    if (!year) {
+      return { body: { ok: false, error: 'Falta parámetro year' } };
     }
+
+    const data = await buildYearCompact(year);
+    return { body: { ok: true, data } };
+  } catch (err) {
+    context.log.error('getYearCompact error:', err);
+    return { status: 500, body: { ok: false, error: err.message } };
   }
-});
+};
 
 async function buildYearCompact(year) {
-  // Reservas are partitioned by "YYYY-MM"
   const pkStart = `${year}-01`;
   const pkEnd = `${year}-12`;
   const reservas = await getByPartitionRange('Reservas', pkStart, pkEnd);
@@ -35,7 +28,6 @@ async function buildYearCompact(year) {
     return f >= firstStr && f <= lastStr;
   });
 
-  // Build lookup tables
   const userMap = new Map();
   const actMap = new Map();
   const groupMap = new Map();
@@ -80,7 +72,6 @@ async function buildYearCompact(year) {
     }
   });
 
-  // Build compact records: [id, salaId, doy, bloqueId, userIdx, actIdx, groupIdx, commentIdx, equipStr, respIdx]
   const startOfYear = new Date(year, 0, 1);
 
   const records = yearReservations.map(r => {

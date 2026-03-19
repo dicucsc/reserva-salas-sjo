@@ -59,10 +59,12 @@ const App = {
         btn.textContent = 'Ingresar con cuenta UCSC';
       }
     } catch (e) {
-      // Not authenticated or error, show login screen
+      console.error('tryAutoLogin error:', e);
       const btn = document.getElementById('btn-login');
       btn.disabled = false;
       btn.textContent = 'Ingresar con cuenta UCSC';
+      document.getElementById('login-error').textContent = 'Error: ' + (e.message || e);
+      document.getElementById('login-error').classList.remove('d-none');
     }
   },
 
