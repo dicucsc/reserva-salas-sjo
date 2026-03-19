@@ -16,6 +16,7 @@ const Calendar = {
   selection: [],
   lastClicked: null,
   cancelSelection: [],
+  filterSalaId: null,
 
   formatDate(d) {
     if (d instanceof Date) {
@@ -64,6 +65,7 @@ const Calendar = {
     this.buildResMap();
     this.setupNavigation();
     this.setupEventDelegation();
+    this.buildSalaFilters();
     this.render();
     this.startAutoRefresh();
   },
@@ -121,6 +123,32 @@ const Calendar = {
     });
   },
 
+  buildSalaFilters() {
+    const container = document.getElementById('sala-filters');
+    if (!container || this.salas.length === 0) return;
+
+    let html = '<span class="text-muted" style="font-size:0.75rem">Vista:</span>';
+    this.salas.forEach(sala => {
+      html += `<button class="btn btn-outline-secondary btn-sm btn-sala-filter" data-sala-id="${sala.ID}">${this.escapeHtml(sala.Nombre)}</button>`;
+    });
+    html += '<button class="btn btn-secondary btn-sm btn-sala-filter active" data-sala-id="all">Todos</button>';
+    container.innerHTML = html;
+
+    container.addEventListener('click', e => {
+      const btn = e.target.closest('.btn-sala-filter');
+      if (!btn) return;
+      const val = btn.dataset.salaId;
+      this.filterSalaId = val === 'all' ? null : Number(val);
+      container.querySelectorAll('.btn-sala-filter').forEach(b => {
+        b.classList.remove('active', 'btn-secondary');
+        b.classList.add('btn-outline-secondary');
+      });
+      btn.classList.remove('btn-outline-secondary');
+      btn.classList.add('active', 'btn-secondary');
+      this.render();
+    });
+  },
+
   navigate(dir) {
     this.currentDate.setDate(this.currentDate.getDate() + (dir * 7));
     document.getElementById('date-picker').value = this.formatDate(this.currentDate);
@@ -168,9 +196,7 @@ const Calendar = {
   startAutoRefresh() {
     this.stopAutoRefresh();
     this.refreshInterval = setInterval(async () => {
-      this.loadedYear = null;
-      this.allReservations = [];
-      await this.ensureYearLoaded();
+      await this.reloadData();
       this.render();
     }, 90000);
   },
@@ -186,6 +212,22 @@ const Calendar = {
     this.loadedYear = null;
     this.allReservations = [];
     this._resMap = new Map();
+  },
+
+  async reloadData() {
+    const year = this.currentDate.getFullYear();
+    const res = await Api.getYearCompact(year);
+    if (res.ok) {
+      this.allReservations = this.expandCompact(res.data);
+      this.loadedYear = year;
+      this.buildResMap();
+    }
+  },
+
+  escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   },
 
   // ── Selection (reservar) ──────────────────────────────
@@ -291,37 +333,7 @@ const Calendar = {
 
   async openSelectionReservation() {
     if (this.selection.length === 0) return;
-
-    const btn = document.querySelector('#selection-bar .btn-success');
-    if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
-
-    try {
-      this.invalidateCache();
-      await this.ensureYearLoaded();
-
-      const conflicts = [];
-      const valid = this.selection.filter(s => {
-        if (this.getRes(s.salaId, s.fecha, s.bloqueId)) {
-          conflicts.push(s);
-          return false;
-        }
-        return true;
-      });
-
-      if (conflicts.length > 0) {
-        this.selection = valid;
-        this.updateSelectionUI();
-        this.updateSelectionBar();
-        this.render();
-        App.showToast(`${conflicts.length} bloque(s) ya fueron reservados por otro usuario`, 'warning');
-      }
-
-      if (valid.length > 0) {
-        App.openMultiReservation(valid);
-      }
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Reservar bloques seleccionados'; }
-    }
+    App.openMultiReservation(this.selection);
   },
 
   // ── Selection (cancelar) ──────────────────────────────
@@ -493,20 +505,22 @@ const Calendar = {
   renderOccupiedCell(reserva) {
     const isMine = App.isMyEmail(reserva.Email);
     const cls = isMine ? 'cell-mine' : 'cell-occupied';
-    const act = reserva.Actividad || 'Reservado';
-    const displayName = (reserva.Responsable || reserva.Nombre || '').split(' ')[0];
+    const act = this.escapeHtml(reserva.Actividad || 'Reservado');
+    const displayName = this.escapeHtml((reserva.Responsable || reserva.Nombre || '').split(' ')[0]);
+    const resp = this.escapeHtml(reserva.Responsable || reserva.Nombre || '');
+    const nombre = this.escapeHtml(reserva.Nombre || '');
 
     if (isMine) {
       const cancelSel = this.isCancelSelected(reserva.ID) ? 'cell-cancel-selected' : '';
       return `<td class="${cls} ${cancelSel}"
         data-cancel-sel="${reserva.ID}"
         data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
-        title="${act} — Resp: ${reserva.Responsable || reserva.Nombre} — Reservó: ${reserva.Nombre} — Click para cancelar">
+        title="${act} — Resp: ${resp} — Reservó: ${nombre} — Click para cancelar">
         <div class="cell-act">${act}</div><div class="cell-name">${displayName}</div>
       </td>`;
     }
 
-    return `<td class="${cls}" title="${act} — Resp: ${reserva.Responsable || reserva.Nombre} — Reservó: ${reserva.Nombre}">
+    return `<td class="${cls}" title="${act} — Resp: ${resp} — Reservó: ${nombre}">
       <div class="cell-act">${act}</div><div class="cell-name">${displayName}</div>
     </td>`;
   },
@@ -542,9 +556,13 @@ const Calendar = {
       });
     }
 
+    const visibleSalas = this.filterSalaId != null
+      ? this.salas.filter(s => s.ID === this.filterSalaId)
+      : this.salas;
+
     const h = ['<div class="sala-grid">'];
 
-    this.salas.forEach(sala => {
+    visibleSalas.forEach(sala => {
       h.push(`<div class="sala-panel">`);
       h.push(`<div class="sala-panel-header"><span class="sala-panel-name">${sala.Nombre}</span><span class="sala-panel-cap">Cap. ${sala.Capacidad}</span></div>`);
       h.push('<table class="week-table">');

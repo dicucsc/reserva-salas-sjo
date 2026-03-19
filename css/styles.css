@@ -215,6 +215,22 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--color-border);
 }
 
+.sala-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  padding-left: 0.625rem;
+  border-left: 2px solid var(--color-border);
+}
+
+.sala-filters .btn-sala-filter {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
 /* ── Legend Bar ───────────────────────────────────────── */
 
 .legend-bar {

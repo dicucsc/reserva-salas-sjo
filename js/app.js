@@ -23,7 +23,13 @@ const App = {
     await this.tryAutoLogin();
   },
 
-  // ── Email helper ───────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────
+
+  escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  },
 
   isMyEmail(email) {
     return String(email).trim().toLowerCase() === this.currentUser?.Email?.trim().toLowerCase();
@@ -187,8 +193,8 @@ const App = {
         this.showToast(`Reserva confirmada (${allSlots.length} bloque${allSlots.length > 1 ? 's' : ''})`, 'success');
         this._modalReservar.hide();
         Calendar.clearSelection();
-        Calendar.invalidateCache();
-        Calendar.loadAndRender();
+        await Calendar.reloadData();
+        Calendar.render();
       } else {
         this.showToast(res.error || 'Error al reservar', 'error');
       }
@@ -221,11 +227,10 @@ const App = {
     btn.textContent = 'Cancelando...';
 
     try {
-      let errors = [];
-      for (const s of this._cancelItems) {
-        const res = await Api.cancelReservation(s.reservaId, s.fecha);
-        if (!res.ok) errors.push(res.error);
-      }
+      const results = await Promise.all(
+        this._cancelItems.map(s => Api.cancelReservation(s.reservaId, s.fecha))
+      );
+      const errors = results.filter(r => !r.ok).map(r => r.error);
 
       if (errors.length === 0) {
         this.showToast(`${this._cancelItems.length} reserva(s) cancelada(s)`, 'success');
@@ -235,8 +240,8 @@ const App = {
 
       this._modalCancelar.hide();
       Calendar.clearCancelSelection();
-      Calendar.invalidateCache();
-      Calendar.loadAndRender();
+      await Calendar.reloadData();
+      Calendar.render();
     } catch (e) {
       this.showToast('Error de conexión', 'error');
     } finally {
@@ -283,9 +288,9 @@ const App = {
           <div class="d-flex justify-content-between align-items-start mb-2">
             <div>
               <span class="badge bg-primary">Recurrente (${reservas.length} bloques)</span>
-              <h6 class="mt-1 mb-0">${sala?.Nombre || 'Sala'} — ${reservas[0].Actividad}</h6>
+              <h6 class="mt-1 mb-0">${this.escapeHtml(sala?.Nombre || 'Sala')} — ${this.escapeHtml(reservas[0].Actividad)}</h6>
             </div>
-            <button class="btn btn-outline-danger btn-sm" onclick="App.cancelRecurrenceGroup('${groupId}')">Cancelar grupo</button>
+            <button class="btn btn-outline-danger btn-sm" onclick="App.cancelRecurrenceGroup('${this.escapeHtml(groupId)}')">Cancelar grupo</button>
           </div>
           <ul class="mb-0" style="font-size:0.8125rem">
             ${reservas.map(r => {
@@ -304,8 +309,8 @@ const App = {
       h.push(`<div class="card mb-2">
         <div class="card-body d-flex justify-content-between align-items-center">
           <div>
-            <strong>${sala?.Nombre || 'Sala'}</strong> — ${r.Fecha} — ${bl?.Etiqueta || ''}
-            <br><small class="text-muted">${r.Actividad}</small>
+            <strong>${this.escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${this.escapeHtml(r.Fecha)} — ${this.escapeHtml(bl?.Etiqueta || '')}
+            <br><small class="text-muted">${this.escapeHtml(r.Actividad)}</small>
           </div>
           <button class="btn btn-outline-danger btn-sm" onclick="App.cancelSingle(${r.ID},'${r.Fecha}')">Cancelar</button>
         </div>
@@ -320,9 +325,9 @@ const App = {
     const res = await Api.cancelReservation(id, fecha);
     if (res.ok) {
       this.showToast('Reserva cancelada', 'success');
+      await Calendar.reloadData();
+      Calendar.render();
       this.loadMyReservations();
-      Calendar.invalidateCache();
-      Calendar.loadAndRender();
     } else {
       this.showToast(res.error || 'Error', 'error');
     }
@@ -333,9 +338,9 @@ const App = {
     const res = await Api.cancelRecurrenceGroup(groupId);
     if (res.ok) {
       this.showToast(`${res.data.canceladas} reservas canceladas`, 'success');
+      await Calendar.reloadData();
+      Calendar.render();
       this.loadMyReservations();
-      Calendar.invalidateCache();
-      Calendar.loadAndRender();
     } else {
       this.showToast(res.error || 'Error', 'error');
     }
@@ -350,8 +355,8 @@ const App = {
     const bloque = Calendar.bloques.find(b => b.ID === reserva.BloqueID);
 
     document.getElementById('edit-res-info').innerHTML =
-      `<strong>${sala?.Nombre || 'Sala'}</strong> — ${reserva.Fecha} — ${bloque?.Etiqueta || ''}<br>
-       <small class="text-muted">Reservado por: ${reserva.Nombre}</small>`;
+      `<strong>${this.escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${this.escapeHtml(reserva.Fecha)} — ${this.escapeHtml(bloque?.Etiqueta || '')}<br>
+       <small class="text-muted">Reservado por: ${this.escapeHtml(reserva.Nombre)}</small>`;
 
     document.getElementById('edit-res-actividad').value = reserva.Actividad || '';
     document.getElementById('edit-res-responsable').value = reserva.Responsable || reserva.Nombre || '';
@@ -425,8 +430,8 @@ const App = {
       if (res.ok) {
         this.showToast('Reserva actualizada', 'success');
         this._modalEditar.hide();
-        Calendar.invalidateCache();
-        Calendar.loadAndRender();
+        await Calendar.reloadData();
+        Calendar.render();
       } else {
         this.showToast(res.error || 'Error al actualizar', 'error');
       }
@@ -453,25 +458,8 @@ const App = {
       return;
     }
 
-    // Calculate equipment usage for selected slots
-    const slots = this._reservationSelections || [];
-    const eqUsage = {};
-    Calendar.equipos.forEach(eq => { eqUsage[eq.ID] = 0; });
-
-    slots.forEach(s => {
-      Calendar.allReservations.forEach(r => {
-        if (r.Fecha === s.fecha && r.BloqueID === s.bloqueId && r.Equipos) {
-          r.Equipos.split(',').forEach(id => {
-            const eqId = id.trim();
-            if (eqId && eqUsage[Number(eqId)] !== undefined) {
-              eqUsage[Number(eqId)]++;
-            }
-          });
-        }
-      });
-    });
-
     // Get max usage across all selected slots for each equipment
+    const slots = this._reservationSelections || [];
     const maxUsage = {};
     Calendar.equipos.forEach(eq => { maxUsage[eq.ID] = 0; });
     slots.forEach(s => {
@@ -545,11 +533,11 @@ const App = {
           }).filter(Boolean).join(', ') : '';
 
           h.push(`<tr>
-            <td><strong>${bloque ? bloque.Etiqueta : ''}</strong></td>
-            <td>${r.Actividad || ''}</td>
-            <td>${r.Responsable || r.Nombre}</td>
-            <td>${r.Comentarios || ''}</td>
-            <td>${eqNames}</td>
+            <td><strong>${this.escapeHtml(bloque ? bloque.Etiqueta : '')}</strong></td>
+            <td>${this.escapeHtml(r.Actividad || '')}</td>
+            <td>${this.escapeHtml(r.Responsable || r.Nombre)}</td>
+            <td>${this.escapeHtml(r.Comentarios || '')}</td>
+            <td>${this.escapeHtml(eqNames)}</td>
           </tr>`);
         });
 
@@ -595,7 +583,7 @@ const App = {
     el.className = 'toast align-items-center text-white border-0 show';
     el.style.background = bg;
     el.setAttribute('role', 'alert');
-    el.innerHTML = `<div class="d-flex"><div class="toast-body">${message}</div>
+    el.innerHTML = `<div class="d-flex"><div class="toast-body">${this.escapeHtml(message)}</div>
       <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button></div>`;
 
     container.appendChild(el);
