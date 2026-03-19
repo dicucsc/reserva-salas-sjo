@@ -279,8 +279,8 @@ h1, h2, h3, h4, h5, h6 {
 
 .sala-grid-single .col-hora {
   font-size: 0.9375rem;
-  width: 100px;
-  min-width: 100px;
+  width: 110px;
+  min-width: 110px;
   padding: 0.35rem 0.5rem !important;
 }
 
@@ -375,8 +375,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .col-hora {
-  width: 82px;
-  min-width: 82px;
+  width: 96px;
+  min-width: 96px;
   text-align: right !important;
   padding: 0.25rem 0.4rem !important;
   background: var(--color-bg) !important;
@@ -385,6 +385,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--color-text-secondary);
   white-space: nowrap;
   letter-spacing: -0.02em;
+  overflow: hidden;
 }
 
 .col-day {
@@ -716,8 +717,8 @@ h1, h2, h3, h4, h5, h6 {
 /* ── Responsive ──────────────────────────────────────── */
 
 @media (max-width: 1200px) {
-  .col-hora { width: 65px; min-width: 65px; font-size: 0.625rem; }
-  .week-table th { font-size: 0.625rem; }
+  .col-hora { width: 80px; min-width: 80px; font-size: 0.6875rem; }
+  .week-table th { font-size: 0.6875rem; }
 }
 
 @media (max-width: 992px) {
@@ -727,7 +728,7 @@ h1, h2, h3, h4, h5, h6 {
     overflow-y: auto;
   }
   .sala-panel { min-height: 300px; }
-  .col-hora { width: 72px; min-width: 72px; }
+  .col-hora { width: 80px; min-width: 80px; }
   body { overflow: auto; }
 }
 
