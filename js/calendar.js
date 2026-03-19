@@ -517,12 +517,12 @@ const Calendar = {
         data-cancel-sel="${reserva.ID}"
         data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
         title="${act} — Resp: ${resp} — Reservó: ${nombre} — Click para cancelar">
-        <div class="cell-act">${act}</div><div class="cell-name">${displayName}</div>
+        <div class="cell-inner"><div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
       </td>`;
     }
 
     return `<td class="${cls}" title="${act} — Resp: ${resp} — Reservó: ${nombre}">
-      <div class="cell-act">${act}</div><div class="cell-name">${displayName}</div>
+      <div class="cell-inner"><div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
     </td>`;
   },
 
