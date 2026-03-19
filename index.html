@@ -56,6 +56,9 @@
           </ul>
           <div class="d-flex align-items-center gap-2">
             <span class="navbar-text" id="user-display"></span>
+            <button id="btn-config" class="btn btn-outline-light btn-sm" onclick="App.showView('configuracion')" title="Configuración">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.902 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/></svg>
+            </button>
             <button id="btn-logout" class="btn btn-outline-light btn-sm">Salir</button>
           </div>
         </div>
@@ -132,6 +135,75 @@
           <input type="date" id="summary-date-picker" class="form-control form-control-sm" style="width:180px">
         </div>
         <div id="daily-summary-content"></div>
+      </section>
+
+      <!-- Vista Configuración -->
+      <section id="view-configuracion" class="view-section d-none">
+        <h4 class="mb-3">Configuración</h4>
+        <ul class="nav nav-tabs mb-3" id="config-tabs">
+          <li class="nav-item"><a class="nav-link active" href="#" onclick="App.showConfigTab('equipos',event)">Equipos</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" onclick="App.showConfigTab('bloques',event)">Bloques Horarios</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" onclick="App.showConfigTab('salas',event)">Salas</a></li>
+        </ul>
+
+        <!-- Tab Equipos -->
+        <div id="config-tab-equipos" class="config-tab">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Equipos</h5>
+            <button class="btn btn-primary btn-sm" onclick="App.openConfigForm('equipos')">+ Agregar</button>
+          </div>
+          <div id="config-equipos-form" class="card mb-3 d-none">
+            <div class="card-body">
+              <input type="hidden" id="cfg-equipo-id">
+              <div class="row g-2 align-items-end">
+                <div class="col"><label class="form-label small mb-0">Nombre</label><input type="text" class="form-control form-control-sm" id="cfg-equipo-nombre"></div>
+                <div class="col"><label class="form-label small mb-0">Descripción</label><input type="text" class="form-control form-control-sm" id="cfg-equipo-desc"></div>
+                <div class="col-2"><label class="form-label small mb-0">Cantidad</label><input type="number" class="form-control form-control-sm" id="cfg-equipo-cantidad" value="1" min="1"></div>
+                <div class="col-auto"><button class="btn btn-success btn-sm" onclick="App.saveConfig('equipos')">Guardar</button> <button class="btn btn-secondary btn-sm" onclick="App.closeConfigForm('equipos')">Cancelar</button></div>
+              </div>
+            </div>
+          </div>
+          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Cantidad</th><th style="width:100px"></th></tr></thead><tbody id="config-equipos-list"></tbody></table>
+        </div>
+
+        <!-- Tab Bloques -->
+        <div id="config-tab-bloques" class="config-tab d-none">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Bloques Horarios</h5>
+            <button class="btn btn-primary btn-sm" onclick="App.openConfigForm('bloques')">+ Agregar</button>
+          </div>
+          <div id="config-bloques-form" class="card mb-3 d-none">
+            <div class="card-body">
+              <input type="hidden" id="cfg-bloque-id">
+              <div class="row g-2 align-items-end">
+                <div class="col"><label class="form-label small mb-0">Hora Inicio</label><input type="time" class="form-control form-control-sm" id="cfg-bloque-inicio"></div>
+                <div class="col"><label class="form-label small mb-0">Hora Fin</label><input type="time" class="form-control form-control-sm" id="cfg-bloque-fin"></div>
+                <div class="col"><label class="form-label small mb-0">Etiqueta</label><input type="text" class="form-control form-control-sm" id="cfg-bloque-etiqueta" placeholder="Ej: 08:00 - 09:00"></div>
+                <div class="col-auto"><button class="btn btn-success btn-sm" onclick="App.saveConfig('bloques')">Guardar</button> <button class="btn btn-secondary btn-sm" onclick="App.closeConfigForm('bloques')">Cancelar</button></div>
+              </div>
+            </div>
+          </div>
+          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Hora Inicio</th><th>Hora Fin</th><th>Etiqueta</th><th style="width:100px"></th></tr></thead><tbody id="config-bloques-list"></tbody></table>
+        </div>
+
+        <!-- Tab Salas -->
+        <div id="config-tab-salas" class="config-tab d-none">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Salas</h5>
+            <button class="btn btn-primary btn-sm" onclick="App.openConfigForm('salas')">+ Agregar</button>
+          </div>
+          <div id="config-salas-form" class="card mb-3 d-none">
+            <div class="card-body">
+              <input type="hidden" id="cfg-sala-id">
+              <div class="row g-2 align-items-end">
+                <div class="col"><label class="form-label small mb-0">Nombre</label><input type="text" class="form-control form-control-sm" id="cfg-sala-nombre"></div>
+                <div class="col-3"><label class="form-label small mb-0">Capacidad</label><input type="number" class="form-control form-control-sm" id="cfg-sala-capacidad" min="0"></div>
+                <div class="col-auto"><button class="btn btn-success btn-sm" onclick="App.saveConfig('salas')">Guardar</button> <button class="btn btn-secondary btn-sm" onclick="App.closeConfigForm('salas')">Cancelar</button></div>
+              </div>
+            </div>
+          </div>
+          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Nombre</th><th>Capacidad</th><th style="width:100px"></th></tr></thead><tbody id="config-salas-list"></tbody></table>
+        </div>
       </section>
     </div>
   </div>

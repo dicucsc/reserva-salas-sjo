@@ -53,6 +53,7 @@ const Api = {
   createReservation: (data) => Api._post('createReservation', data),
   cancelReservation: (id, fecha) => Api._post('cancelReservation', { reservaId: id, fecha }),
   cancelRecurrenceGroup: (g) => Api._post('cancelRecurrenceGroup', { recurrenciaGrupo: g }),
-  updateReservation: (data) => Api._post('updateReservation', data)
+  updateReservation: (data) => Api._post('updateReservation', data),
+  adminConfig: (resource, action, data) => Api._post('adminConfig', { resource, action, data: data || {} })
 
 };

@@ -97,6 +97,7 @@ const App = {
 
     if (name === 'mis-reservas') this.loadMyReservations();
     if (name === 'resumen-diario') this.loadDailySummary();
+    if (name === 'configuracion') this.loadConfigTab('equipos');
   },
 
   // ── Modal de Reserva ──────────────────────────────────
@@ -601,6 +602,157 @@ const App = {
 
     container.appendChild(el);
     setTimeout(() => el.remove(), 4000);
+  },
+
+  // ── Configuración ────────────────────────────────────
+
+  _configTab: 'equipos',
+
+  showConfigTab(tab, event) {
+    if (event) event.preventDefault();
+    document.querySelectorAll('#config-tabs .nav-link').forEach(l => l.classList.remove('active'));
+    document.querySelectorAll('.config-tab').forEach(t => t.classList.add('d-none'));
+    document.querySelector(`#config-tabs .nav-link[onclick*="${tab}"]`)?.classList.add('active');
+    document.getElementById('config-tab-' + tab)?.classList.remove('d-none');
+    this._configTab = tab;
+    this.loadConfigTab(tab);
+  },
+
+  async loadConfigTab(tab) {
+    const res = await Api.adminConfig(tab, 'list');
+    if (!res.ok) { this.showToast(res.error || 'Error cargando datos', 'error'); return; }
+
+    const tbody = document.getElementById('config-' + tab + '-list');
+    if (tab === 'equipos') {
+      tbody.innerHTML = res.data.map(e =>
+        `<tr><td>${e.ID}</td><td>${this.escapeHtml(e.Nombre)}</td><td>${this.escapeHtml(e.Descripcion || '')}</td><td>${e.Cantidad}</td>
+         <td><button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('equipos',${e.ID})">Editar</button>
+         <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('equipos',${e.ID})">Eliminar</button></td></tr>`
+      ).join('') || '<tr><td colspan="5" class="text-muted text-center">Sin equipos</td></tr>';
+    } else if (tab === 'bloques') {
+      tbody.innerHTML = res.data.map(b =>
+        `<tr><td>${b.ID}</td><td>${this.escapeHtml(b.HoraInicio)}</td><td>${this.escapeHtml(b.HoraFin)}</td><td>${this.escapeHtml(b.Etiqueta || '')}</td>
+         <td><button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('bloques',${b.ID})">Editar</button>
+         <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('bloques',${b.ID})">Eliminar</button></td></tr>`
+      ).join('') || '<tr><td colspan="5" class="text-muted text-center">Sin bloques</td></tr>';
+    } else if (tab === 'salas') {
+      tbody.innerHTML = res.data.map(s =>
+        `<tr><td>${s.ID}</td><td>${this.escapeHtml(s.Nombre)}</td><td>${s.Capacidad}</td>
+         <td><button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('salas',${s.ID})">Editar</button>
+         <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('salas',${s.ID})">Eliminar</button></td></tr>`
+      ).join('') || '<tr><td colspan="4" class="text-muted text-center">Sin salas</td></tr>';
+    }
+    this._configData = res.data;
+  },
+
+  openConfigForm(tab) {
+    document.getElementById('config-' + tab + '-form').classList.remove('d-none');
+    if (tab === 'equipos') {
+      document.getElementById('cfg-equipo-id').value = '';
+      document.getElementById('cfg-equipo-nombre').value = '';
+      document.getElementById('cfg-equipo-desc').value = '';
+      document.getElementById('cfg-equipo-cantidad').value = '1';
+    } else if (tab === 'bloques') {
+      document.getElementById('cfg-bloque-id').value = '';
+      document.getElementById('cfg-bloque-inicio').value = '';
+      document.getElementById('cfg-bloque-fin').value = '';
+      document.getElementById('cfg-bloque-etiqueta').value = '';
+    } else if (tab === 'salas') {
+      document.getElementById('cfg-sala-id').value = '';
+      document.getElementById('cfg-sala-nombre').value = '';
+      document.getElementById('cfg-sala-capacidad').value = '';
+    }
+  },
+
+  closeConfigForm(tab) {
+    document.getElementById('config-' + tab + '-form').classList.add('d-none');
+  },
+
+  editConfig(tab, id) {
+    const item = (this._configData || []).find(i => i.ID === id);
+    if (!item) return;
+    this.openConfigForm(tab);
+    if (tab === 'equipos') {
+      document.getElementById('cfg-equipo-id').value = id;
+      document.getElementById('cfg-equipo-nombre').value = item.Nombre;
+      document.getElementById('cfg-equipo-desc').value = item.Descripcion || '';
+      document.getElementById('cfg-equipo-cantidad').value = item.Cantidad;
+    } else if (tab === 'bloques') {
+      document.getElementById('cfg-bloque-id').value = id;
+      document.getElementById('cfg-bloque-inicio').value = item.HoraInicio;
+      document.getElementById('cfg-bloque-fin').value = item.HoraFin;
+      document.getElementById('cfg-bloque-etiqueta').value = item.Etiqueta || '';
+    } else if (tab === 'salas') {
+      document.getElementById('cfg-sala-id').value = id;
+      document.getElementById('cfg-sala-nombre').value = item.Nombre;
+      document.getElementById('cfg-sala-capacidad').value = item.Capacidad;
+    }
+  },
+
+  async saveConfig(tab) {
+    let data = {};
+    if (tab === 'equipos') {
+      data = {
+        ID: document.getElementById('cfg-equipo-id').value ? Number(document.getElementById('cfg-equipo-id').value) : null,
+        Nombre: document.getElementById('cfg-equipo-nombre').value.trim(),
+        Descripcion: document.getElementById('cfg-equipo-desc').value.trim(),
+        Cantidad: Number(document.getElementById('cfg-equipo-cantidad').value) || 1
+      };
+      if (!data.Nombre) { this.showToast('Ingresa el nombre', 'warning'); return; }
+    } else if (tab === 'bloques') {
+      data = {
+        ID: document.getElementById('cfg-bloque-id').value ? Number(document.getElementById('cfg-bloque-id').value) : null,
+        HoraInicio: document.getElementById('cfg-bloque-inicio').value,
+        HoraFin: document.getElementById('cfg-bloque-fin').value,
+        Etiqueta: document.getElementById('cfg-bloque-etiqueta').value.trim()
+      };
+      if (!data.HoraInicio || !data.HoraFin) { this.showToast('Ingresa horas de inicio y fin', 'warning'); return; }
+      if (!data.Etiqueta) data.Etiqueta = data.HoraInicio + ' - ' + data.HoraFin;
+    } else if (tab === 'salas') {
+      data = {
+        ID: document.getElementById('cfg-sala-id').value ? Number(document.getElementById('cfg-sala-id').value) : null,
+        Nombre: document.getElementById('cfg-sala-nombre').value.trim(),
+        Capacidad: Number(document.getElementById('cfg-sala-capacidad').value) || 0
+      };
+      if (!data.Nombre) { this.showToast('Ingresa el nombre', 'warning'); return; }
+    }
+
+    const res = await Api.adminConfig(tab, 'save', data);
+    if (res.ok) {
+      this.showToast('Guardado', 'success');
+      this.closeConfigForm(tab);
+      this.loadConfigTab(tab);
+      // Reload calendar data
+      const initRes = await Api.fullInit();
+      if (initRes.ok) {
+        Calendar.salas = initRes.data.salas;
+        Calendar.bloques = initRes.data.bloques;
+        Calendar.equipos = initRes.data.equipos || [];
+        Calendar.buildSalaFilters();
+        Calendar.render();
+      }
+    } else {
+      this.showToast(res.error || 'Error al guardar', 'error');
+    }
+  },
+
+  async deleteConfig(tab, id) {
+    if (!confirm('¿Eliminar este registro?')) return;
+    const res = await Api.adminConfig(tab, 'delete', { ID: id });
+    if (res.ok) {
+      this.showToast('Eliminado', 'success');
+      this.loadConfigTab(tab);
+      const initRes = await Api.fullInit();
+      if (initRes.ok) {
+        Calendar.salas = initRes.data.salas;
+        Calendar.bloques = initRes.data.bloques;
+        Calendar.equipos = initRes.data.equipos || [];
+        Calendar.buildSalaFilters();
+        Calendar.render();
+      }
+    } else {
+      this.showToast(res.error || 'Error al eliminar', 'error');
+    }
   }
 };
 
