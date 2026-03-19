@@ -223,7 +223,7 @@ const App = {
     try {
       let errors = [];
       for (const s of this._cancelItems) {
-        const res = await Api.cancelReservation(s.reservaId);
+        const res = await Api.cancelReservation(s.reservaId, s.fecha);
         if (!res.ok) errors.push(res.error);
       }
 
@@ -307,7 +307,7 @@ const App = {
             <strong>${sala?.Nombre || 'Sala'}</strong> — ${r.Fecha} — ${bl?.Etiqueta || ''}
             <br><small class="text-muted">${r.Actividad}</small>
           </div>
-          <button class="btn btn-outline-danger btn-sm" onclick="App.cancelSingle(${r.ID})">Cancelar</button>
+          <button class="btn btn-outline-danger btn-sm" onclick="App.cancelSingle(${r.ID},'${r.Fecha}')">Cancelar</button>
         </div>
       </div>`);
     });
@@ -315,9 +315,9 @@ const App = {
     container.innerHTML = h.join('');
   },
 
-  async cancelSingle(id) {
+  async cancelSingle(id, fecha) {
     if (!confirm('¿Cancelar esta reserva?')) return;
-    const res = await Api.cancelReservation(id);
+    const res = await Api.cancelReservation(id, fecha);
     if (res.ok) {
       this.showToast('Reserva cancelada', 'success');
       this.loadMyReservations();
@@ -415,6 +415,7 @@ const App = {
     try {
       const res = await Api.updateReservation({
         reservaId: this._editReserva.ID,
+        fecha: this._editReserva.Fecha,
         actividad: document.getElementById('edit-res-actividad').value.trim(),
         responsable: document.getElementById('edit-res-responsable').value.trim(),
         comentarios: document.getElementById('edit-res-comentarios').value.trim(),
@@ -440,7 +441,7 @@ const App = {
   deleteFromEdit() {
     if (!confirm('¿Cancelar esta reserva?')) return;
     this._modalEditar.hide();
-    this.cancelSingle(this._editReserva.ID);
+    this.cancelSingle(this._editReserva.ID, this._editReserva.Fecha);
   },
 
   // ── Equipment Checkboxes ────────────────────────────

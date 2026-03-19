@@ -36,7 +36,8 @@ const Api = {
   getUserProfile: () => Api._get('getUserProfile'),
   getYearCompact: (year) => Api._get('getYearCompact', { year }),
   createReservation: (data) => Api._post('createReservation', data),
-  cancelReservation: (id) => Api._post('cancelReservation', { reservaId: id }),
+  cancelReservation: (id, fecha) => Api._post('cancelReservation', { reservaId: id, fecha }),
   cancelRecurrenceGroup: (g) => Api._post('cancelRecurrenceGroup', { recurrenciaGrupo: g }),
   updateReservation: (data) => Api._post('updateReservation', data)
+
 };

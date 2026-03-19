@@ -1,6 +1,6 @@
 const { app } = require('@azure/functions');
 const { getUserEmail } = require('../shared/auth');
-const { getByPartitionRange, deleteEntity } = require('../shared/tableClient');
+const { getEntity, getByPartition, deleteEntity } = require('../shared/tableClient');
 
 app.http('cancelReservation', {
   methods: ['POST'],
@@ -14,37 +14,36 @@ app.http('cancelReservation', {
       }
 
       const body = await request.json();
-      const { reservaId } = body;
+      const { reservaId, fecha } = body;
 
       if (!reservaId) {
         return { jsonBody: { ok: false, error: 'Falta reservaId' } };
       }
 
-      // Search across all months for this reservation
-      const now = new Date();
-      const year = now.getFullYear();
-      const allReservas = await getByPartitionRange('Reservas', `${year - 1}-01`, `${year + 1}-12`);
+      // Direct O(1) lookup using fecha to derive partition key
+      const month = fecha ? fecha.substring(0, 7) : null;
+      let reserva = null;
 
-      const reserva = allReservas.find(r =>
-        r.rowKey === String(reservaId) &&
-        (r.Email || '').trim().toLowerCase() === email
-      );
+      if (month) {
+        reserva = await getEntity('Reservas', month, String(reservaId));
+      }
 
-      if (!reserva) {
+      // Verify ownership
+      if (!reserva || (reserva.Email || '').trim().toLowerCase() !== email) {
         return { jsonBody: { ok: false, error: 'Reserva no encontrada o email no coincide' } };
       }
 
-      // Delete the reservation
-      await deleteEntity('Reservas', reserva.partitionKey, reserva.rowKey);
+      // Delete reservation and equipment in parallel
+      const deleteOps = [deleteEntity('Reservas', reserva.partitionKey, reserva.rowKey)];
 
-      // Delete associated equipment reservations
-      const month = reserva.partitionKey;
-      const eqReservas = await getByPartitionRange('ReservaEquipos', month, month);
-      for (const eq of eqReservas) {
-        if (eq.ReservaID === String(reservaId)) {
-          await deleteEntity('ReservaEquipos', eq.partitionKey, eq.rowKey);
-        }
-      }
+      // Find and delete associated equipment reservations
+      const eqReservas = await getByPartition('ReservaEquipos', month);
+      const eqToDelete = eqReservas.filter(eq => eq.ReservaID === String(reservaId));
+      eqToDelete.forEach(eq => {
+        deleteOps.push(deleteEntity('ReservaEquipos', eq.partitionKey, eq.rowKey));
+      });
+
+      await Promise.all(deleteOps);
 
       return { jsonBody: { ok: true } };
     } catch (err) {

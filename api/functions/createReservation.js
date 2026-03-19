@@ -23,38 +23,35 @@ app.http('createReservation', {
         return { jsonBody: { ok: false, error: 'Faltan campos obligatorios' } };
       }
 
-      // Validate user
-      const user = await getEntity('Usuarios', 'usuarios', email);
-      if (!user) {
-        return { status: 403, jsonBody: { ok: false, error: 'Usuario no registrado' } };
-      }
-
-      const nombreReal = user.Nombre;
-
-      // Load reference data
-      const [salasRaw, bloquesRaw, equiposCatalog] = await Promise.all([
+      // Validate user + load reference data in parallel
+      const [user, salasRaw, bloquesRaw, equiposCatalog] = await Promise.all([
+        getEntity('Usuarios', 'usuarios', email),
         getByPartition('Salas', 'salas'),
         getByPartition('Bloques', 'bloques'),
         getByPartition('Equipos', 'equipos')
       ]);
 
+      if (!user) {
+        return { status: 403, jsonBody: { ok: false, error: 'Usuario no registrado' } };
+      }
+
+      const nombreReal = user.Nombre;
       const bloques = bloquesRaw.map(b => ({
         ID: Number(b.rowKey),
         Etiqueta: b.Etiqueta || `${b.HoraInicio} - ${b.HoraFin}`
       }));
 
-      // Collect all months involved
-      const monthsNeeded = new Set();
-      slots.forEach(s => {
-        monthsNeeded.add(s.fecha.substring(0, 7));
-      });
+      // Collect all months involved and load in parallel
+      const monthsNeeded = [...new Set(slots.map(s => s.fecha.substring(0, 7)))];
 
-      // Load existing reservations for affected months
-      let existingReservations = [];
-      for (const month of monthsNeeded) {
-        const monthRes = await getByPartition('Reservas', month);
-        existingReservations = existingReservations.concat(monthRes);
-      }
+      const [monthReservations, monthEquipment] = await Promise.all([
+        Promise.all(monthsNeeded.map(m => getByPartition('Reservas', m))),
+        equipos && equipos.length > 0
+          ? Promise.all(monthsNeeded.map(m => getByPartition('ReservaEquipos', m)))
+          : Promise.resolve([])
+      ]);
+
+      const existingReservations = monthReservations.flat();
 
       // Check for conflicts
       for (const s of slots) {
@@ -77,11 +74,7 @@ app.http('createReservation', {
       // Validate equipment availability
       const equiposArr = Array.isArray(equipos) ? equipos : [];
       if (equiposArr.length > 0) {
-        let eqReservas = [];
-        for (const month of monthsNeeded) {
-          const monthEq = await getByPartition('ReservaEquipos', month);
-          eqReservas = eqReservas.concat(monthEq);
-        }
+        const eqReservas = monthEquipment.flat();
 
         const slotGroups = {};
         slots.forEach(s => {
@@ -122,16 +115,15 @@ app.http('createReservation', {
       const equiposStr = equiposArr.join(',');
       const createdIds = [];
 
-      // Create reservation entities
-      const reservationEntities = [];
-      const eqEntities = [];
+      // Build all entities
+      const allWrites = [];
 
       for (const s of slots) {
-        const month = s.fecha.substring(0, 7); // YYYY-MM
+        const month = s.fecha.substring(0, 7);
         const id = generateId();
         createdIds.push(id);
 
-        reservationEntities.push({
+        allWrites.push(upsertEntity('Reservas', {
           partitionKey: month,
           rowKey: String(id),
           SalaID: Number(s.salaId),
@@ -145,14 +137,14 @@ app.http('createReservation', {
           Comentarios: comentarioStr,
           Equipos: equiposStr,
           Responsable: responsableStr
-        });
+        }));
 
         // Equipment reservations
         if (equiposArr.length > 0) {
           const sala = salasRaw.find(l => l.rowKey === String(s.salaId));
           for (const eqId of equiposArr) {
             const equipo = equiposCatalog.find(e => e.rowKey === String(eqId));
-            eqEntities.push({
+            allWrites.push(upsertEntity('ReservaEquipos', {
               partitionKey: month,
               rowKey: `${id}_${eqId}`,
               ReservaID: String(id),
@@ -163,18 +155,13 @@ app.http('createReservation', {
               SalaID: Number(s.salaId),
               NombreSala: sala ? sala.Nombre : '',
               Responsable: responsableStr
-            });
+            }));
           }
         }
       }
 
-      // Write all entities
-      for (const entity of reservationEntities) {
-        await upsertEntity('Reservas', entity);
-      }
-      for (const entity of eqEntities) {
-        await upsertEntity('ReservaEquipos', entity);
-      }
+      // Write all entities in parallel
+      await Promise.all(allWrites);
 
       return {
         jsonBody: { ok: true, data: { ids: createdIds, count: createdIds.length } }
@@ -186,7 +173,6 @@ app.http('createReservation', {
   }
 });
 
-// Generate a unique numeric-ish ID using timestamp + random
 function generateId() {
   return Date.now() * 1000 + Math.floor(Math.random() * 1000);
 }

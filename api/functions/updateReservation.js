@@ -1,7 +1,7 @@
 const { app } = require('@azure/functions');
 const { getUserEmail } = require('../shared/auth');
 const {
-  getByPartition, getByPartitionRange,
+  getEntity, getByPartition,
   upsertEntity, deleteEntity
 } = require('../shared/tableClient');
 
@@ -17,23 +17,21 @@ app.http('updateReservation', {
       }
 
       const body = await request.json();
-      const { reservaId, actividad, comentarios, equipos, responsable } = body;
+      const { reservaId, fecha, actividad, comentarios, equipos, responsable } = body;
 
       if (!reservaId) {
         return { jsonBody: { ok: false, error: 'Falta reservaId' } };
       }
 
-      // Find the reservation
-      const now = new Date();
-      const year = now.getFullYear();
-      const allReservas = await getByPartitionRange('Reservas', `${year - 1}-01`, `${year + 1}-12`);
+      // Direct O(1) lookup
+      const month = fecha ? fecha.substring(0, 7) : null;
+      let reserva = null;
 
-      const reserva = allReservas.find(r =>
-        r.rowKey === String(reservaId) &&
-        (r.Email || '').trim().toLowerCase() === email
-      );
+      if (month) {
+        reserva = await getEntity('Reservas', month, String(reservaId));
+      }
 
-      if (!reserva) {
+      if (!reserva || (reserva.Email || '').trim().toLowerCase() !== email) {
         return { jsonBody: { ok: false, error: 'Reserva no encontrada o email no coincide' } };
       }
 
@@ -45,20 +43,21 @@ app.http('updateReservation', {
       const equiposArr = Array.isArray(equipos) ? equipos : [];
       reserva.Equipos = equiposArr.join(',');
 
-      await upsertEntity('Reservas', reserva);
+      // Save reservation + load equipment data in parallel
+      const [, eqReservas] = await Promise.all([
+        upsertEntity('Reservas', reserva),
+        getByPartition('ReservaEquipos', month)
+      ]);
 
-      // Update equipment reservations
-      const month = reserva.partitionKey;
-      const eqReservas = await getByPartitionRange('ReservaEquipos', month, month);
-
-      // Delete old equipment entries for this reservation
-      for (const eq of eqReservas) {
-        if (eq.ReservaID === String(reservaId)) {
-          await deleteEntity('ReservaEquipos', eq.partitionKey, eq.rowKey);
-        }
+      // Delete old equipment entries in parallel
+      const oldEq = eqReservas.filter(eq => eq.ReservaID === String(reservaId));
+      if (oldEq.length > 0) {
+        await Promise.all(oldEq.map(eq =>
+          deleteEntity('ReservaEquipos', eq.partitionKey, eq.rowKey)
+        ));
       }
 
-      // Create new equipment entries
+      // Create new equipment entries in parallel
       if (equiposArr.length > 0) {
         const [salasRaw, equiposCatalog] = await Promise.all([
           getByPartition('Salas', 'salas'),
@@ -68,9 +67,9 @@ app.http('updateReservation', {
         const sala = salasRaw.find(l => l.rowKey === String(reserva.SalaID));
         const respStr = responsable !== undefined ? (responsable || '') : (reserva.Responsable || '');
 
-        for (const eqId of equiposArr) {
+        await Promise.all(equiposArr.map(eqId => {
           const equipo = equiposCatalog.find(e => e.rowKey === String(eqId));
-          await upsertEntity('ReservaEquipos', {
+          return upsertEntity('ReservaEquipos', {
             partitionKey: month,
             rowKey: `${reservaId}_${eqId}`,
             ReservaID: String(reservaId),
@@ -82,7 +81,7 @@ app.http('updateReservation', {
             NombreSala: sala ? sala.Nombre : '',
             Responsable: respStr
           });
-        }
+        }));
       }
 
       return { jsonBody: { ok: true } };

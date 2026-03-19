@@ -1,6 +1,6 @@
 const { app } = require('@azure/functions');
 const { getUserEmail } = require('../shared/auth');
-const { getByPartitionRange, deleteEntity } = require('../shared/tableClient');
+const { getByPartitionRange, getByPartition, deleteEntity } = require('../shared/tableClient');
 
 app.http('cancelRecurrenceGroup', {
   methods: ['POST'],
@@ -20,10 +20,10 @@ app.http('cancelRecurrenceGroup', {
         return { jsonBody: { ok: false, error: 'Falta recurrenciaGrupo' } };
       }
 
-      // Search all reservations for this recurrence group
+      // Search current year only (recurrence groups don't span years)
       const now = new Date();
       const year = now.getFullYear();
-      const allReservas = await getByPartitionRange('Reservas', `${year - 1}-01`, `${year + 1}-12`);
+      const allReservas = await getByPartitionRange('Reservas', `${year}-01`, `${year}-12`);
 
       const matching = allReservas.filter(r =>
         r.Recurrencia === recurrenciaGrupo &&
@@ -34,23 +34,20 @@ app.http('cancelRecurrenceGroup', {
         return { jsonBody: { ok: false, error: 'No se encontraron reservas del grupo' } };
       }
 
-      const deletedIds = matching.map(r => r.rowKey);
+      const deletedIds = new Set(matching.map(r => r.rowKey));
 
-      // Delete all matching reservations
-      for (const reserva of matching) {
-        await deleteEntity('Reservas', reserva.partitionKey, reserva.rowKey);
-      }
-
-      // Delete associated equipment reservations
+      // Load equipment for affected months in parallel
       const months = [...new Set(matching.map(r => r.partitionKey))];
-      for (const month of months) {
-        const eqReservas = await getByPartitionRange('ReservaEquipos', month, month);
-        for (const eq of eqReservas) {
-          if (deletedIds.includes(eq.ReservaID)) {
-            await deleteEntity('ReservaEquipos', eq.partitionKey, eq.rowKey);
-          }
-        }
-      }
+      const eqByMonth = await Promise.all(months.map(m => getByPartition('ReservaEquipos', m)));
+      const allEq = eqByMonth.flat().filter(eq => deletedIds.has(eq.ReservaID));
+
+      // Delete all reservations + equipment in parallel
+      const deleteOps = [
+        ...matching.map(r => deleteEntity('Reservas', r.partitionKey, r.rowKey)),
+        ...allEq.map(eq => deleteEntity('ReservaEquipos', eq.partitionKey, eq.rowKey))
+      ];
+
+      await Promise.all(deleteOps);
 
       return { jsonBody: { ok: true, data: { canceladas: matching.length } } };
     } catch (err) {

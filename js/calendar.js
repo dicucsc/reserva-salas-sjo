@@ -444,23 +444,29 @@ const Calendar = {
     const missing = [...yearsNeeded].filter(y => y !== this.loadedYear);
     if (missing.length === 0) return;
 
-    const container = document.getElementById('calendar-grid');
-    container.innerHTML = '<div class="text-center py-5"><div class="spinner-border" role="status"></div></div>';
+    // Only show spinner on initial load (no data yet)
+    const isInitialLoad = this.allReservations.length === 0 && !this.loadedYear;
+    if (isInitialLoad) {
+      const container = document.getElementById('calendar-grid');
+      container.innerHTML = '<div class="text-center py-5"><div class="spinner-border" role="status"></div></div>';
+    }
 
     const primaryYear = year;
-    const res = await Api.getYearCompact(primaryYear);
-    if (res.ok) {
-      this.allReservations = this.expandCompact(res.data);
+    const promises = [Api.getYearCompact(primaryYear)];
+    const extraYears = [...missing].filter(y => y !== primaryYear);
+    extraYears.forEach(y => promises.push(Api.getYearCompact(y)));
+
+    const results = await Promise.all(promises);
+
+    if (results[0].ok) {
+      this.allReservations = this.expandCompact(results[0].data);
       this.loadedYear = primaryYear;
     }
 
-    for (const y of missing) {
-      if (y !== primaryYear) {
-        const extraRes = await Api.getYearCompact(y);
-        if (extraRes.ok) {
-          const extra = this.expandCompact(extraRes.data);
-          this.allReservations = this.allReservations.concat(extra);
-        }
+    for (let i = 1; i < results.length; i++) {
+      if (results[i].ok) {
+        const extra = this.expandCompact(results[i].data);
+        this.allReservations = this.allReservations.concat(extra);
       }
     }
 
