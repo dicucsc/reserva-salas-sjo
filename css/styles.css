@@ -320,12 +320,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .week-table th {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-text-secondary);
   background: var(--color-bg);
   border: 1px solid var(--color-border-light);
-  padding: 0.25rem 0.15rem;
+  padding: 0.3rem 0.2rem;
   text-align: center;
   white-space: nowrap;
 }
@@ -338,12 +338,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .col-hora {
-  width: 78px;
-  min-width: 78px;
+  width: 82px;
+  min-width: 82px;
   text-align: right !important;
-  padding: 0.15rem 0.4rem !important;
+  padding: 0.25rem 0.4rem !important;
   background: var(--color-bg) !important;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   color: var(--color-text-secondary);
   white-space: nowrap;
@@ -351,7 +351,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .col-day {
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
 }
 
 .col-today {
@@ -380,14 +380,14 @@ h1, h2, h3, h4, h5, h6 {
 .cell-occupied {
   background: var(--color-occupied);
   cursor: default;
-  padding: 1px 2px !important;
+  padding: 0.2rem 0.3rem !important;
   overflow: hidden;
 }
 
 .cell-mine {
   background: var(--color-mine);
   cursor: pointer;
-  padding: 1px 2px !important;
+  padding: 0.2rem 0.3rem !important;
   overflow: hidden;
   transition: background-color 0.1s;
 }
@@ -398,9 +398,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .cell-act {
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -408,12 +408,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .cell-name {
-  font-size: 0.625rem;
-  line-height: 1;
+  font-size: 0.75rem;
+  line-height: 1.15;
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-top: 1px;
 }
 
 .cell-occupied .cell-act { color: var(--color-occupied-accent); }

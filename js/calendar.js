@@ -235,6 +235,7 @@ const Calendar = {
   clearSelection() {
     this.selection = [];
     this.lastClicked = null;
+    this.updateSelectionUI();
     this.updateSelectionBar();
   },
 
