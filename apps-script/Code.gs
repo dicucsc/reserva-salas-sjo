@@ -259,6 +259,8 @@ function doPost(e) {
         return jsonResponse(cancelRecurrenceGroup(body));
       case 'updateReservation':
         return jsonResponse(updateReservation(body));
+      case 'changePassword':
+        return jsonResponse(changePassword(body));
       default:
         return jsonResponse({ ok: false, error: 'Acción POST no válida: ' + action });
     }
@@ -389,10 +391,10 @@ function createReservation(body) {
     lock.releaseLock();
   }
 
-  // Email fuera del lock
-  if (emailData) {
-    try { sendConfirmationEmail(email, nombreReal, emailData); } catch(e) {}
-  }
+  // Email desactivado temporalmente
+  // if (emailData) {
+  //   try { sendConfirmationEmail(email, nombreReal, emailData); } catch(e) {}
+  // }
 
   return result;
 }
@@ -488,9 +490,10 @@ function cancelReservation(body) {
     lock.releaseLock();
   }
 
-  if (emailData) {
-    try { sendCancellationEmail(email, user.Nombre, emailData); } catch(e) {}
-  }
+  // Email desactivado temporalmente
+  // if (emailData) {
+  //   try { sendCancellationEmail(email, user.Nombre, emailData); } catch(e) {}
+  // }
 
   return result;
 }
@@ -627,6 +630,42 @@ function updateReservation(body) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ── Cambiar contraseña ───────────────────────────────────────
+
+function changePassword(body) {
+  const { email, currentPassword, newPassword } = body;
+
+  if (!email || !currentPassword || !newPassword)
+    return { ok: false, error: 'Faltan campos obligatorios' };
+
+  if (newPassword.length < 4)
+    return { ok: false, error: 'La nueva contraseña debe tener al menos 4 caracteres' };
+
+  const sheet = getSheet(SHEET_USUARIOS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const passCol = headers.indexOf('Password');
+
+  if (passCol === -1)
+    return { ok: false, error: 'Columna Password no encontrada' };
+
+  const emailCol = headers.indexOf('Email');
+  const normalized = email.trim().toLowerCase();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][emailCol]).trim().toLowerCase() === normalized) {
+      if (String(data[i][passCol] || '') !== String(currentPassword)) {
+        return { ok: false, error: 'Contraseña actual incorrecta' };
+      }
+      sheet.getRange(i + 1, passCol + 1).setValue(newPassword);
+      invalidateCache();
+      return { ok: true };
+    }
+  }
+
+  return { ok: false, error: 'Usuario no encontrado' };
 }
 
 // ── Emails ──────────────────────────────────────────────────
