@@ -560,7 +560,8 @@ const Calendar = {
       ? this.salas.filter(s => s.ID === this.filterSalaId)
       : this.salas;
 
-    const h = ['<div class="sala-grid">'];
+    const gridClass = visibleSalas.length === 1 ? 'sala-grid sala-grid-single' : 'sala-grid';
+    const h = [`<div class="${gridClass}">`];
 
     visibleSalas.forEach(sala => {
       h.push(`<div class="sala-panel">`);
