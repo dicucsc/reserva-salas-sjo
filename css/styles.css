@@ -299,12 +299,6 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 2px;
 }
 
-.sala-grid-single .cell-occupied,
-.sala-grid-single .cell-mine {
-  padding: 0.35rem 0.4rem !important;
-}
-
-
 .sala-grid-single .sala-panel-header {
   font-size: 1rem;
   padding: 0.4rem 0.75rem;
@@ -366,14 +360,9 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--color-bg);
   border-right: 1px solid #b0b8c4;
   border-bottom: 1px solid #b0b8c4;
-  padding: 0 0.2rem;
+  padding: 0.15rem 0.2rem;
   text-align: center;
   white-space: nowrap;
-  line-height: 1.1;
-}
-
-.week-table tbody tr {
-  height: 1px;
 }
 
 .week-table td {
@@ -382,7 +371,6 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0;
   text-align: center;
   vertical-align: middle;
-  overflow: hidden;
 }
 
 .week-table th:last-child,
@@ -397,7 +385,7 @@ h1, h2, h3, h4, h5, h6 {
 .col-hora {
   width: 96px;
   min-width: 96px;
-  padding: 0 0.4rem !important;
+  padding: 0.15rem 0.4rem !important;
   background: var(--color-bg) !important;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -405,7 +393,6 @@ h1, h2, h3, h4, h5, h6 {
   white-space: nowrap;
   letter-spacing: -0.02em;
   overflow: hidden;
-  line-height: 1.1;
 }
 
 th.col-hora {
