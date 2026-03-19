@@ -513,6 +513,14 @@ const App = {
     this.renderDailySummary(picker.value);
   },
 
+  shiftSummaryDate(delta) {
+    const picker = document.getElementById('summary-date-picker');
+    const d = new Date(picker.value + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    picker.value = Calendar.formatDate(d);
+    this.renderDailySummary(picker.value);
+  },
+
   renderDailySummary(dateStr) {
     const container = document.getElementById('daily-summary-content');
     const reservas = Calendar.allReservations.filter(r => r.Fecha === dateStr);
@@ -618,101 +626,120 @@ const App = {
     this.loadConfigTab(tab);
   },
 
+  _renderReadRow(tab, item) {
+    const esc = s => this.escapeHtml(s);
+    const btns = `<td>
+      <button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('${tab}',${item.ID})">Editar</button>
+      <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('${tab}',${item.ID})">Eliminar</button></td>`;
+    if (tab === 'equipos') {
+      return `<tr data-id="${item.ID}"><td>${item.ID}</td><td>${esc(item.Nombre)}</td><td>${esc(item.Descripcion || '')}</td><td>${item.Cantidad}</td>${btns}</tr>`;
+    } else if (tab === 'bloques') {
+      return `<tr data-id="${item.ID}"><td>${item.ID}</td><td>${esc(item.HoraInicio)}</td><td>${esc(item.HoraFin)}</td><td>${esc(item.Etiqueta || '')}</td>${btns}</tr>`;
+    } else if (tab === 'salas') {
+      return `<tr data-id="${item.ID}"><td>${item.ID}</td><td>${esc(item.Nombre)}</td><td>${item.Capacidad}</td>${btns}</tr>`;
+    }
+  },
+
+  _renderEditRow(tab, item) {
+    const esc = s => this.escapeHtml(s);
+    const id = item ? item.ID : '';
+    const btns = `<td>
+      <button class="btn btn-success btn-sm py-0 px-1" onclick="App.saveConfig('${tab}',${id || 'null'})">Guardar</button>
+      <button class="btn btn-secondary btn-sm py-0 px-1" onclick="App.cancelEditRow('${tab}')">Cancelar</button></td>`;
+    if (tab === 'equipos') {
+      return `<tr class="cfg-editing" data-id="${id}">
+        <td>${id || '<small class="text-muted">Nuevo</small>'}</td>
+        <td><input type="text" class="form-control form-control-sm" data-field="Nombre" value="${esc(item?.Nombre || '')}"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="Descripcion" value="${esc(item?.Descripcion || '')}"></td>
+        <td><input type="number" class="form-control form-control-sm" data-field="Cantidad" value="${item?.Cantidad ?? 1}" min="1"></td>
+        ${btns}</tr>`;
+    } else if (tab === 'bloques') {
+      return `<tr class="cfg-editing" data-id="${id}">
+        <td>${id || '<small class="text-muted">Nuevo</small>'}</td>
+        <td><input type="time" class="form-control form-control-sm" data-field="HoraInicio" value="${esc(item?.HoraInicio || '')}"></td>
+        <td><input type="time" class="form-control form-control-sm" data-field="HoraFin" value="${esc(item?.HoraFin || '')}"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="Etiqueta" value="${esc(item?.Etiqueta || '')}" placeholder="Ej: 08:00 - 09:00"></td>
+        ${btns}</tr>`;
+    } else if (tab === 'salas') {
+      return `<tr class="cfg-editing" data-id="${id}">
+        <td>${id || '<small class="text-muted">Nuevo</small>'}</td>
+        <td><input type="text" class="form-control form-control-sm" data-field="Nombre" value="${esc(item?.Nombre || '')}"></td>
+        <td><input type="number" class="form-control form-control-sm" data-field="Capacidad" value="${item?.Capacidad ?? 0}" min="0"></td>
+        ${btns}</tr>`;
+    }
+  },
+
   async loadConfigTab(tab) {
     const res = await Api.adminConfig(tab, 'list');
     if (!res.ok) { this.showToast(res.error || 'Error cargando datos', 'error'); return; }
 
     const tbody = document.getElementById('config-' + tab + '-list');
-    if (tab === 'equipos') {
-      tbody.innerHTML = res.data.map(e =>
-        `<tr><td>${e.ID}</td><td>${this.escapeHtml(e.Nombre)}</td><td>${this.escapeHtml(e.Descripcion || '')}</td><td>${e.Cantidad}</td>
-         <td><button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('equipos',${e.ID})">Editar</button>
-         <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('equipos',${e.ID})">Eliminar</button></td></tr>`
-      ).join('') || '<tr><td colspan="5" class="text-muted text-center">Sin equipos</td></tr>';
-    } else if (tab === 'bloques') {
-      tbody.innerHTML = res.data.map(b =>
-        `<tr><td>${b.ID}</td><td>${this.escapeHtml(b.HoraInicio)}</td><td>${this.escapeHtml(b.HoraFin)}</td><td>${this.escapeHtml(b.Etiqueta || '')}</td>
-         <td><button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('bloques',${b.ID})">Editar</button>
-         <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('bloques',${b.ID})">Eliminar</button></td></tr>`
-      ).join('') || '<tr><td colspan="5" class="text-muted text-center">Sin bloques</td></tr>';
-    } else if (tab === 'salas') {
-      tbody.innerHTML = res.data.map(s =>
-        `<tr><td>${s.ID}</td><td>${this.escapeHtml(s.Nombre)}</td><td>${s.Capacidad}</td>
-         <td><button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('salas',${s.ID})">Editar</button>
-         <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('salas',${s.ID})">Eliminar</button></td></tr>`
-      ).join('') || '<tr><td colspan="4" class="text-muted text-center">Sin salas</td></tr>';
-    }
+    const colSpan = tab === 'salas' ? 4 : 5;
+    const emptyLabels = { equipos: 'Sin equipos', bloques: 'Sin bloques', salas: 'Sin salas' };
+
+    tbody.innerHTML = res.data.map(item => this._renderReadRow(tab, item)).join('')
+      || `<tr><td colspan="${colSpan}" class="text-muted text-center">${emptyLabels[tab]}</td></tr>`;
     this._configData = res.data;
   },
 
-  openConfigForm(tab) {
-    document.getElementById('config-' + tab + '-form').classList.remove('d-none');
-    if (tab === 'equipos') {
-      document.getElementById('cfg-equipo-id').value = '';
-      document.getElementById('cfg-equipo-nombre').value = '';
-      document.getElementById('cfg-equipo-desc').value = '';
-      document.getElementById('cfg-equipo-cantidad').value = '1';
-    } else if (tab === 'bloques') {
-      document.getElementById('cfg-bloque-id').value = '';
-      document.getElementById('cfg-bloque-inicio').value = '';
-      document.getElementById('cfg-bloque-fin').value = '';
-      document.getElementById('cfg-bloque-etiqueta').value = '';
-    } else if (tab === 'salas') {
-      document.getElementById('cfg-sala-id').value = '';
-      document.getElementById('cfg-sala-nombre').value = '';
-      document.getElementById('cfg-sala-capacidad').value = '';
-    }
-  },
-
-  closeConfigForm(tab) {
-    document.getElementById('config-' + tab + '-form').classList.add('d-none');
+  addConfigRow(tab) {
+    const tbody = document.getElementById('config-' + tab + '-list');
+    // Remove any existing editing row first
+    const existing = tbody.querySelector('tr.cfg-editing');
+    if (existing) { this.cancelEditRow(tab); return; }
+    tbody.insertAdjacentHTML('beforeend', this._renderEditRow(tab, null));
+    tbody.querySelector('tr.cfg-editing input')?.focus();
   },
 
   editConfig(tab, id) {
     const item = (this._configData || []).find(i => i.ID === id);
     if (!item) return;
-    this.openConfigForm(tab);
-    if (tab === 'equipos') {
-      document.getElementById('cfg-equipo-id').value = id;
-      document.getElementById('cfg-equipo-nombre').value = item.Nombre;
-      document.getElementById('cfg-equipo-desc').value = item.Descripcion || '';
-      document.getElementById('cfg-equipo-cantidad').value = item.Cantidad;
-    } else if (tab === 'bloques') {
-      document.getElementById('cfg-bloque-id').value = id;
-      document.getElementById('cfg-bloque-inicio').value = item.HoraInicio;
-      document.getElementById('cfg-bloque-fin').value = item.HoraFin;
-      document.getElementById('cfg-bloque-etiqueta').value = item.Etiqueta || '';
-    } else if (tab === 'salas') {
-      document.getElementById('cfg-sala-id').value = id;
-      document.getElementById('cfg-sala-nombre').value = item.Nombre;
-      document.getElementById('cfg-sala-capacidad').value = item.Capacidad;
+    const tbody = document.getElementById('config-' + tab + '-list');
+    // Cancel any other editing row
+    const existing = tbody.querySelector('tr.cfg-editing');
+    if (existing) existing.remove();
+    // Replace the target row with an edit row
+    const row = tbody.querySelector(`tr[data-id="${id}"]`);
+    if (row) {
+      row.outerHTML = this._renderEditRow(tab, item);
+      tbody.querySelector('tr.cfg-editing input')?.focus();
     }
   },
 
-  async saveConfig(tab) {
+  cancelEditRow(tab) {
+    this.loadConfigTab(tab);
+  },
+
+  async saveConfig(tab, rowId) {
+    const tbody = document.getElementById('config-' + tab + '-list');
+    const editRow = tbody.querySelector('tr.cfg-editing');
+    if (!editRow) return;
+
+    const val = field => (editRow.querySelector(`input[data-field="${field}"]`)?.value || '').trim();
+
     let data = {};
     if (tab === 'equipos') {
       data = {
-        ID: document.getElementById('cfg-equipo-id').value ? Number(document.getElementById('cfg-equipo-id').value) : null,
-        Nombre: document.getElementById('cfg-equipo-nombre').value.trim(),
-        Descripcion: document.getElementById('cfg-equipo-desc').value.trim(),
-        Cantidad: Number(document.getElementById('cfg-equipo-cantidad').value) || 1
+        ID: rowId || null,
+        Nombre: val('Nombre'),
+        Descripcion: val('Descripcion'),
+        Cantidad: Number(val('Cantidad')) || 1
       };
       if (!data.Nombre) { this.showToast('Ingresa el nombre', 'warning'); return; }
     } else if (tab === 'bloques') {
       data = {
-        ID: document.getElementById('cfg-bloque-id').value ? Number(document.getElementById('cfg-bloque-id').value) : null,
-        HoraInicio: document.getElementById('cfg-bloque-inicio').value,
-        HoraFin: document.getElementById('cfg-bloque-fin').value,
-        Etiqueta: document.getElementById('cfg-bloque-etiqueta').value.trim()
+        ID: rowId || null,
+        HoraInicio: val('HoraInicio'),
+        HoraFin: val('HoraFin'),
+        Etiqueta: val('Etiqueta')
       };
       if (!data.HoraInicio || !data.HoraFin) { this.showToast('Ingresa horas de inicio y fin', 'warning'); return; }
       if (!data.Etiqueta) data.Etiqueta = data.HoraInicio + ' - ' + data.HoraFin;
     } else if (tab === 'salas') {
       data = {
-        ID: document.getElementById('cfg-sala-id').value ? Number(document.getElementById('cfg-sala-id').value) : null,
-        Nombre: document.getElementById('cfg-sala-nombre').value.trim(),
-        Capacidad: Number(document.getElementById('cfg-sala-capacidad').value) || 0
+        ID: rowId || null,
+        Nombre: val('Nombre'),
+        Capacidad: Number(val('Capacidad')) || 0
       };
       if (!data.Nombre) { this.showToast('Ingresa el nombre', 'warning'); return; }
     }
@@ -720,9 +747,7 @@ const App = {
     const res = await Api.adminConfig(tab, 'save', data);
     if (res.ok) {
       this.showToast('Guardado', 'success');
-      this.closeConfigForm(tab);
       this.loadConfigTab(tab);
-      // Reload calendar data
       const initRes = await Api.fullInit();
       if (initRes.ok) {
         Calendar.salas = initRes.data.salas;

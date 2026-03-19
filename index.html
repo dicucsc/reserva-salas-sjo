@@ -132,7 +132,9 @@
       <section id="view-resumen-diario" class="view-section d-none">
         <div class="d-flex align-items-center gap-3 mb-3">
           <h4 class="mb-0">Resumen Diario</h4>
+          <button class="btn btn-outline-secondary btn-sm" onclick="App.shiftSummaryDate(-1)">&larr;</button>
           <input type="date" id="summary-date-picker" class="form-control form-control-sm" style="width:180px">
+          <button class="btn btn-outline-secondary btn-sm" onclick="App.shiftSummaryDate(1)">&rarr;</button>
         </div>
         <div id="daily-summary-content"></div>
       </section>
@@ -150,59 +152,27 @@
         <div id="config-tab-equipos" class="config-tab">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="mb-0">Equipos</h5>
-            <button class="btn btn-primary btn-sm" onclick="App.openConfigForm('equipos')">+ Agregar</button>
+            <button class="btn btn-primary btn-sm" onclick="App.addConfigRow('equipos')">+ Agregar</button>
           </div>
-          <div id="config-equipos-form" class="card mb-3 d-none">
-            <div class="card-body">
-              <input type="hidden" id="cfg-equipo-id">
-              <div class="row g-2 align-items-end">
-                <div class="col"><label class="form-label small mb-0">Nombre</label><input type="text" class="form-control form-control-sm" id="cfg-equipo-nombre"></div>
-                <div class="col"><label class="form-label small mb-0">Descripción</label><input type="text" class="form-control form-control-sm" id="cfg-equipo-desc"></div>
-                <div class="col-2"><label class="form-label small mb-0">Cantidad</label><input type="number" class="form-control form-control-sm" id="cfg-equipo-cantidad" value="1" min="1"></div>
-                <div class="col-auto"><button class="btn btn-success btn-sm" onclick="App.saveConfig('equipos')">Guardar</button> <button class="btn btn-secondary btn-sm" onclick="App.closeConfigForm('equipos')">Cancelar</button></div>
-              </div>
-            </div>
-          </div>
-          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Cantidad</th><th style="width:100px"></th></tr></thead><tbody id="config-equipos-list"></tbody></table>
+          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th>Cantidad</th><th style="width:140px"></th></tr></thead><tbody id="config-equipos-list"></tbody></table>
         </div>
 
         <!-- Tab Bloques -->
         <div id="config-tab-bloques" class="config-tab d-none">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="mb-0">Bloques Horarios</h5>
-            <button class="btn btn-primary btn-sm" onclick="App.openConfigForm('bloques')">+ Agregar</button>
+            <button class="btn btn-primary btn-sm" onclick="App.addConfigRow('bloques')">+ Agregar</button>
           </div>
-          <div id="config-bloques-form" class="card mb-3 d-none">
-            <div class="card-body">
-              <input type="hidden" id="cfg-bloque-id">
-              <div class="row g-2 align-items-end">
-                <div class="col"><label class="form-label small mb-0">Hora Inicio</label><input type="time" class="form-control form-control-sm" id="cfg-bloque-inicio"></div>
-                <div class="col"><label class="form-label small mb-0">Hora Fin</label><input type="time" class="form-control form-control-sm" id="cfg-bloque-fin"></div>
-                <div class="col"><label class="form-label small mb-0">Etiqueta</label><input type="text" class="form-control form-control-sm" id="cfg-bloque-etiqueta" placeholder="Ej: 08:00 - 09:00"></div>
-                <div class="col-auto"><button class="btn btn-success btn-sm" onclick="App.saveConfig('bloques')">Guardar</button> <button class="btn btn-secondary btn-sm" onclick="App.closeConfigForm('bloques')">Cancelar</button></div>
-              </div>
-            </div>
-          </div>
-          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Hora Inicio</th><th>Hora Fin</th><th>Etiqueta</th><th style="width:100px"></th></tr></thead><tbody id="config-bloques-list"></tbody></table>
+          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Hora Inicio</th><th>Hora Fin</th><th>Etiqueta</th><th style="width:140px"></th></tr></thead><tbody id="config-bloques-list"></tbody></table>
         </div>
 
         <!-- Tab Salas -->
         <div id="config-tab-salas" class="config-tab d-none">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="mb-0">Salas</h5>
-            <button class="btn btn-primary btn-sm" onclick="App.openConfigForm('salas')">+ Agregar</button>
+            <button class="btn btn-primary btn-sm" onclick="App.addConfigRow('salas')">+ Agregar</button>
           </div>
-          <div id="config-salas-form" class="card mb-3 d-none">
-            <div class="card-body">
-              <input type="hidden" id="cfg-sala-id">
-              <div class="row g-2 align-items-end">
-                <div class="col"><label class="form-label small mb-0">Nombre</label><input type="text" class="form-control form-control-sm" id="cfg-sala-nombre"></div>
-                <div class="col-3"><label class="form-label small mb-0">Capacidad</label><input type="number" class="form-control form-control-sm" id="cfg-sala-capacidad" min="0"></div>
-                <div class="col-auto"><button class="btn btn-success btn-sm" onclick="App.saveConfig('salas')">Guardar</button> <button class="btn btn-secondary btn-sm" onclick="App.closeConfigForm('salas')">Cancelar</button></div>
-              </div>
-            </div>
-          </div>
-          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Nombre</th><th>Capacidad</th><th style="width:100px"></th></tr></thead><tbody id="config-salas-list"></tbody></table>
+          <table class="table table-sm table-bordered"><thead><tr><th>ID</th><th>Nombre</th><th>Capacidad</th><th style="width:140px"></th></tr></thead><tbody id="config-salas-list"></tbody></table>
         </div>
       </section>
     </div>
