@@ -670,16 +670,27 @@ const App = {
   },
 
   async loadConfigTab(tab) {
-    const res = await Api.adminConfig(tab, 'list');
-    if (!res.ok) { this.showToast(res.error || 'Error cargando datos', 'error'); return; }
+    // Use data already loaded by fullInit (Calendar), with API fallback
+    let items;
+    if (tab === 'equipos' && Calendar.equipos?.length) {
+      items = Calendar.equipos;
+    } else if (tab === 'bloques' && Calendar.bloques?.length) {
+      items = Calendar.bloques;
+    } else if (tab === 'salas' && Calendar.salas?.length) {
+      items = Calendar.salas;
+    } else {
+      const res = await Api.adminConfig(tab, 'list');
+      if (!res.ok) { this.showToast(res.error || 'Error cargando datos', 'error'); return; }
+      items = res.data;
+    }
 
     const tbody = document.getElementById('config-' + tab + '-list');
     const colSpan = tab === 'salas' ? 4 : 5;
     const emptyLabels = { equipos: 'Sin equipos', bloques: 'Sin bloques', salas: 'Sin salas' };
 
-    tbody.innerHTML = res.data.map(item => this._renderReadRow(tab, item)).join('')
+    tbody.innerHTML = items.map(item => this._renderReadRow(tab, item)).join('')
       || `<tr><td colspan="${colSpan}" class="text-muted text-center">${emptyLabels[tab]}</td></tr>`;
-    this._configData = res.data;
+    this._configData = items;
   },
 
   addConfigRow(tab) {
