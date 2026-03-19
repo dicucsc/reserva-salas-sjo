@@ -346,7 +346,9 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
   height: 100%;
   table-layout: fixed;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #b0b8c4;
   font-size: 0.8125rem;
 }
 
@@ -361,17 +363,28 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   color: var(--color-text-secondary);
   background: var(--color-bg);
-  border: 1px solid #b0b8c4;
+  border-right: 1px solid #b0b8c4;
+  border-bottom: 1px solid #b0b8c4;
   padding: 0.3rem 0.2rem;
   text-align: center;
   white-space: nowrap;
 }
 
 .week-table td {
-  border: 1px solid #b0b8c4;
+  border-right: 1px solid #b0b8c4;
+  border-bottom: 1px solid #b0b8c4;
   padding: 0;
   text-align: center;
   vertical-align: middle;
+}
+
+.week-table th:last-child,
+.week-table td:last-child {
+  border-right: none;
+}
+
+.week-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .col-hora {
