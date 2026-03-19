@@ -755,40 +755,47 @@ const App = {
       if (!data.Nombre) { this.showToast('Ingresa el nombre', 'warning'); return; }
     }
 
-    const res = await Api.adminConfig(tab, 'save', data);
-    if (res.ok) {
-      this.showToast('Guardado', 'success');
-      this.loadConfigTab(tab);
-      const initRes = await Api.fullInit();
-      if (initRes.ok) {
-        Calendar.salas = initRes.data.salas;
-        Calendar.bloques = initRes.data.bloques;
-        Calendar.equipos = initRes.data.equipos || [];
-        Calendar.buildSalaFilters();
-        Calendar.render();
+    try {
+      const res = await Api.adminConfig(tab, 'save', data);
+      if (res.ok) {
+        this.showToast('Guardado', 'success');
+        await this._reloadConfigAndCalendar(tab);
+      } else {
+        this.showToast(res.error || 'Error al guardar', 'error');
       }
-    } else {
-      this.showToast(res.error || 'Error al guardar', 'error');
+    } catch (e) {
+      console.error('saveConfig error:', e);
+      this.showToast('Error de conexión al guardar', 'error');
     }
   },
 
   async deleteConfig(tab, id) {
     if (!confirm('¿Eliminar este registro?')) return;
-    const res = await Api.adminConfig(tab, 'delete', { ID: id });
-    if (res.ok) {
-      this.showToast('Eliminado', 'success');
-      this.loadConfigTab(tab);
-      const initRes = await Api.fullInit();
-      if (initRes.ok) {
-        Calendar.salas = initRes.data.salas;
-        Calendar.bloques = initRes.data.bloques;
-        Calendar.equipos = initRes.data.equipos || [];
-        Calendar.buildSalaFilters();
-        Calendar.render();
+    try {
+      const res = await Api.adminConfig(tab, 'delete', { ID: id });
+      if (res.ok) {
+        this.showToast('Eliminado', 'success');
+        await this._reloadConfigAndCalendar(tab);
+      } else {
+        this.showToast(res.error || 'Error al eliminar', 'error');
       }
-    } else {
-      this.showToast(res.error || 'Error al eliminar', 'error');
+    } catch (e) {
+      console.error('deleteConfig error:', e);
+      this.showToast('Error de conexión al eliminar', 'error');
     }
+  },
+
+  async _reloadConfigAndCalendar(tab) {
+    // Refresh Calendar data FIRST, then re-render config table
+    const initRes = await Api.fullInit();
+    if (initRes.ok) {
+      Calendar.salas = initRes.data.salas;
+      Calendar.bloques = initRes.data.bloques;
+      Calendar.equipos = initRes.data.equipos || [];
+      Calendar.buildSalaFilters();
+      Calendar.render();
+    }
+    this.loadConfigTab(tab);
   }
 };
 
