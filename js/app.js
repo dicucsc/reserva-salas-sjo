@@ -765,7 +765,7 @@ const App = {
       }
     } catch (e) {
       console.error('saveConfig error:', e);
-      this.showToast('Error de conexión al guardar', 'error');
+      this.showToast('Error: ' + (e.message || e), 'error');
     }
   },
 
