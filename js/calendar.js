@@ -507,7 +507,7 @@ const Calendar = {
     const isMine = App.isMyEmail(reserva.Email);
     const cls = isMine ? 'cell-mine' : 'cell-occupied';
     const act = this.escapeHtml(reserva.Actividad || 'Reservado');
-    const displayName = this.escapeHtml((reserva.Responsable || reserva.Nombre || '').split(' ')[0]);
+    const displayName = this.escapeHtml(reserva.Responsable || reserva.Nombre || '');
     const resp = this.escapeHtml(reserva.Responsable || reserva.Nombre || '');
     const nombre = this.escapeHtml(reserva.Nombre || '');
 
