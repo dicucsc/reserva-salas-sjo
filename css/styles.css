@@ -272,6 +272,43 @@ h1, h2, h3, h4, h5, h6 {
   grid-template-rows: 1fr;
 }
 
+.sala-grid-single .week-table th {
+  font-size: 0.9375rem;
+  padding: 0.4rem 0.3rem;
+}
+
+.sala-grid-single .col-hora {
+  font-size: 0.9375rem;
+  width: 100px;
+  min-width: 100px;
+  padding: 0.35rem 0.5rem !important;
+}
+
+.sala-grid-single .col-day {
+  font-size: 0.9375rem;
+}
+
+.sala-grid-single .cell-act {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.sala-grid-single .cell-name {
+  font-size: 0.875rem;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.sala-grid-single .cell-occupied,
+.sala-grid-single .cell-mine {
+  padding: 0.35rem 0.4rem !important;
+}
+
+.sala-grid-single .sala-panel-header {
+  font-size: 1rem;
+  padding: 0.4rem 0.75rem;
+}
+
 .sala-panel {
   display: flex;
   flex-direction: column;
