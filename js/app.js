@@ -367,17 +367,36 @@ const App = {
   populateEditEquipmentCheckboxes(currentEquipos) {
     const container = document.getElementById('edit-res-equipos-container');
     const selectedIds = currentEquipos ? currentEquipos.split(',').map(id => id.trim()) : [];
+    const reserva = this._editReserva;
 
     if (Calendar.equipos.length === 0) {
       container.innerHTML = '<small class="text-muted">No hay equipos disponibles</small>';
       return;
     }
+
+    // Calculate usage for this slot (excluding current reservation)
+    const maxUsage = {};
+    Calendar.equipos.forEach(eq => {
+      let used = 0;
+      Calendar.allReservations.forEach(r => {
+        if (r.Fecha === reserva.Fecha && r.BloqueID === reserva.BloqueID && r.ID !== reserva.ID && r.Equipos) {
+          if (r.Equipos.split(',').map(x => x.trim()).includes(String(eq.ID))) {
+            used++;
+          }
+        }
+      });
+      maxUsage[eq.ID] = used;
+    });
+
     container.innerHTML = Calendar.equipos.map(eq => {
-      const checked = selectedIds.includes(String(eq.ID)) ? 'checked' : '';
+      const isSelected = selectedIds.includes(String(eq.ID));
+      const available = eq.Cantidad - maxUsage[eq.ID];
+      const canSelect = available > 0 || isSelected;
+      const availClass = available <= 0 && !isSelected ? 'text-danger' : 'text-muted';
       return `<div class="form-check">
-        <input class="form-check-input" type="checkbox" value="${eq.ID}" id="edit-eq-${eq.ID}" ${checked}>
+        <input class="form-check-input" type="checkbox" value="${eq.ID}" id="edit-eq-${eq.ID}" ${isSelected ? 'checked' : ''} ${!canSelect ? 'disabled' : ''}>
         <label class="form-check-label" for="edit-eq-${eq.ID}">
-          ${eq.Nombre} <small class="text-muted">(${eq.Descripcion || ''} — ${eq.Cantidad} disponibles)</small>
+          ${eq.Nombre} <small class="${availClass}">(${eq.Descripcion || ''} — ${available} de ${eq.Cantidad} disponibles)</small>
         </label>
       </div>`;
     }).join('');
@@ -432,14 +451,52 @@ const App = {
       container.innerHTML = '<small class="text-muted">No hay equipos disponibles</small>';
       return;
     }
-    container.innerHTML = Calendar.equipos.map(eq =>
-      `<div class="form-check">
-        <input class="form-check-input" type="checkbox" value="${eq.ID}" id="eq-${eq.ID}">
+
+    // Calculate equipment usage for selected slots
+    const slots = this._reservationSelections || [];
+    const eqUsage = {};
+    Calendar.equipos.forEach(eq => { eqUsage[eq.ID] = 0; });
+
+    slots.forEach(s => {
+      Calendar.allReservations.forEach(r => {
+        if (r.Fecha === s.fecha && r.BloqueID === s.bloqueId && r.Equipos) {
+          r.Equipos.split(',').forEach(id => {
+            const eqId = id.trim();
+            if (eqId && eqUsage[Number(eqId)] !== undefined) {
+              eqUsage[Number(eqId)]++;
+            }
+          });
+        }
+      });
+    });
+
+    // Get max usage across all selected slots for each equipment
+    const maxUsage = {};
+    Calendar.equipos.forEach(eq => { maxUsage[eq.ID] = 0; });
+    slots.forEach(s => {
+      Calendar.equipos.forEach(eq => {
+        let used = 0;
+        Calendar.allReservations.forEach(r => {
+          if (r.Fecha === s.fecha && r.BloqueID === s.bloqueId && r.Equipos) {
+            if (r.Equipos.split(',').map(x => x.trim()).includes(String(eq.ID))) {
+              used++;
+            }
+          }
+        });
+        if (used > maxUsage[eq.ID]) maxUsage[eq.ID] = used;
+      });
+    });
+
+    container.innerHTML = Calendar.equipos.map(eq => {
+      const available = eq.Cantidad - maxUsage[eq.ID];
+      const availClass = available <= 0 ? 'text-danger' : 'text-muted';
+      return `<div class="form-check">
+        <input class="form-check-input" type="checkbox" value="${eq.ID}" id="eq-${eq.ID}" ${available <= 0 ? 'disabled' : ''}>
         <label class="form-check-label" for="eq-${eq.ID}">
-          ${eq.Nombre} <small class="text-muted">(${eq.Descripcion || ''} — ${eq.Cantidad} disponibles)</small>
+          ${eq.Nombre} <small class="${availClass}">(${eq.Descripcion || ''} — ${available} de ${eq.Cantidad} disponibles)</small>
         </label>
-      </div>`
-    ).join('');
+      </div>`;
+    }).join('');
   },
 
   // ── Resumen Diario ──────────────────────────────────
