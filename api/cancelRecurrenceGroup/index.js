@@ -1,11 +1,15 @@
-const { getUserEmail } = require('../shared/auth');
+const { getAuthenticatedUser } = require('../shared/auth');
 const { getByPartitionRange, getByPartition, deleteEntity } = require('../shared/tableClient');
 
 module.exports = async function (context, req) {
   try {
-    const email = getUserEmail(req);
-    if (!email) {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
       context.res = { status: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No autenticado' }) };
+      return;
+    }
+    if (user.rol === 'viewer') {
+      context.res = { status: 403, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Sin permisos para cancelar' }) };
       return;
     }
 
@@ -20,10 +24,16 @@ module.exports = async function (context, req) {
     const year = now.getFullYear();
     const allReservas = await getByPartitionRange('Reservas', `${year}-01`, `${year}-12`);
 
-    const matching = allReservas.filter(r =>
-      r.Recurrencia === recurrenciaGrupo &&
-      (r.Email || '').trim().toLowerCase() === email
-    );
+    let matching;
+    if (user.rol === 'admin') {
+      // Admin can cancel any recurrence group
+      matching = allReservas.filter(r => r.Recurrencia === recurrenciaGrupo);
+    } else {
+      matching = allReservas.filter(r =>
+        r.Recurrencia === recurrenciaGrupo &&
+        (r.Email || '').trim().toLowerCase() === user.email
+      );
+    }
 
     if (matching.length === 0) {
       context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No se encontraron reservas del grupo' }) };

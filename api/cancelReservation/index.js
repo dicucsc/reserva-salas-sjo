@@ -1,11 +1,15 @@
-const { getUserEmail } = require('../shared/auth');
+const { getAuthenticatedUser } = require('../shared/auth');
 const { getEntity, getByPartition, deleteEntity } = require('../shared/tableClient');
 
 module.exports = async function (context, req) {
   try {
-    const email = getUserEmail(req);
-    if (!email) {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
       context.res = { status: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No autenticado' }) };
+      return;
+    }
+    if (user.rol === 'viewer') {
+      context.res = { status: 403, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Sin permisos para cancelar' }) };
       return;
     }
 
@@ -23,8 +27,14 @@ module.exports = async function (context, req) {
       reserva = await getEntity('Reservas', month, String(reservaId));
     }
 
-    if (!reserva || (reserva.Email || '').trim().toLowerCase() !== email) {
-      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Reserva no encontrada o email no coincide' }) };
+    if (!reserva) {
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Reserva no encontrada' }) };
+      return;
+    }
+
+    // Admin can cancel any reservation; others only their own
+    if (user.rol !== 'admin' && (reserva.Email || '').trim().toLowerCase() !== user.email) {
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No puedes cancelar reservas de otros usuarios' }) };
       return;
     }
 

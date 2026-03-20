@@ -93,6 +93,11 @@ const Calendar = {
   setupEventDelegation() {
     const container = document.getElementById('calendar-grid');
     container.addEventListener('click', e => {
+      const rol = (App.currentUser?.Rol || 'user').toLowerCase();
+
+      // Viewer: no interactions
+      if (rol === 'viewer') return;
+
       const freeCell = e.target.closest('[data-sala][data-fecha][data-bloque]:not([data-res-id])');
       if (freeCell) {
         const salaId = Number(freeCell.dataset.sala);
@@ -105,12 +110,12 @@ const Calendar = {
         return;
       }
 
-      const mineCell = e.target.closest('[data-res-id]');
-      if (mineCell) {
-        const reservaId = Number(mineCell.dataset.resId);
-        const salaId = Number(mineCell.dataset.sala);
-        const fecha = mineCell.dataset.fecha;
-        const bloqueId = Number(mineCell.dataset.bloque);
+      const editableCell = e.target.closest('[data-res-id]');
+      if (editableCell) {
+        const reservaId = Number(editableCell.dataset.resId);
+        const salaId = Number(editableCell.dataset.sala);
+        const fecha = editableCell.dataset.fecha;
+        const bloqueId = Number(editableCell.dataset.bloque);
         const sala = this.salas.find(s => s.ID === salaId);
         const bloque = this.bloques.find(b => b.ID === bloqueId);
         if (e.shiftKey) {
@@ -503,30 +508,59 @@ const Calendar = {
     this.updateSelectionUI();
   },
 
-  renderOccupiedCell(reserva) {
+  renderOccupiedCell(reserva, equipUsage) {
+    const rol = (App.currentUser?.Rol || 'user').toLowerCase();
     const isMine = App.isMyEmail(reserva.Email);
-    const cls = isMine ? 'cell-mine' : 'cell-occupied';
+    const isAdmin = rol === 'admin';
+    const isViewer = rol === 'viewer';
     const act = this.escapeHtml(reserva.Actividad || 'Reservado');
     const displayName = this.escapeHtml(reserva.Responsable || reserva.Nombre || '');
     const resp = this.escapeHtml(reserva.Responsable || reserva.Nombre || '');
     const nombre = this.escapeHtml(reserva.Nombre || '');
+    const warnCls = equipUsage && this.hasEquipWarning(reserva, equipUsage) ? ' cell-equip-warn' : '';
+    const warnIcon = warnCls ? '<span class="equip-warn-icon" title="Equipo insuficiente">⚠</span>' : '';
 
-    if (isMine) {
-      const cancelSel = this.isCancelSelected(reserva.ID) ? 'cell-cancel-selected' : '';
-      return `<td class="${cls} ${cancelSel}"
-        data-cancel-sel="${reserva.ID}"
-        data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
-        title="${act} — Resp: ${resp} — Reservó: ${nombre} — Click para cancelar">
-        <div class="cell-inner"><div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
+    // Viewer: all cells are plain occupied, no interaction
+    if (isViewer) {
+      const cls = isMine ? 'cell-mine' : 'cell-occupied';
+      return `<td class="${cls}${warnCls}" title="${act} — Resp: ${resp} — Reservó: ${nombre}">
+        <div class="cell-inner">${warnIcon}<div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
       </td>`;
     }
 
-    return `<td class="${cls}" title="${act} — Resp: ${resp} — Reservó: ${nombre}">
-      <div class="cell-inner"><div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
+    // Mine: always clickable
+    if (isMine) {
+      const cancelSel = this.isCancelSelected(reserva.ID) ? 'cell-cancel-selected' : '';
+      return `<td class="cell-mine ${cancelSel}${warnCls}"
+        data-cancel-sel="${reserva.ID}"
+        data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
+        title="${act} — Resp: ${resp} — Reservó: ${nombre} — Click para editar, Shift+click para cancelar">
+        <div class="cell-inner">${warnIcon}<div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
+      </td>`;
+    }
+
+    // Admin: can click on other people's reservations too
+    if (isAdmin) {
+      const cancelSel = this.isCancelSelected(reserva.ID) ? 'cell-cancel-selected' : '';
+      return `<td class="cell-occupied cell-admin-editable ${cancelSel}${warnCls}"
+        data-cancel-sel="${reserva.ID}"
+        data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
+        title="${act} — Resp: ${resp} — Reservó: ${nombre} — Click para editar, Shift+click para cancelar">
+        <div class="cell-inner">${warnIcon}<div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
+      </td>`;
+    }
+
+    // Regular user: other people's reservations are not clickable
+    return `<td class="cell-occupied${warnCls}" title="${act} — Resp: ${resp} — Reservó: ${nombre}">
+      <div class="cell-inner">${warnIcon}<div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
     </td>`;
   },
 
   renderFreeCell(salaId, dateStr, blockId, blockIndex) {
+    const rol = (App.currentUser?.Rol || 'user').toLowerCase();
+    if (rol === 'viewer') {
+      return `<td class="cell-free cell-readonly"></td>`;
+    }
     const sel = this.isSelected(salaId, dateStr, blockId);
     return `<td class="cell-free ${sel ? 'cell-selected' : ''}"
       data-sel="${salaId}-${dateStr}-${blockId}"
@@ -537,12 +571,39 @@ const Calendar = {
 
   // ── Week Grid (2×2) ───────────────────────────────────
 
+  buildEquipUsageMap() {
+    const usage = {};
+    this.allReservations.forEach(r => {
+      if (!r.Equipos) return;
+      r.Equipos.split(',').forEach(eqId => {
+        const id = eqId.trim();
+        if (!id) return;
+        const key = `${r.Fecha}|${r.BloqueID}|${id}`;
+        usage[key] = (usage[key] || 0) + 1;
+      });
+    });
+    return usage;
+  },
+
+  hasEquipWarning(reserva, equipUsage) {
+    if (!reserva.Equipos) return false;
+    return reserva.Equipos.split(',').some(eqId => {
+      const id = eqId.trim();
+      if (!id) return false;
+      const eq = this.equipos.find(e => String(e.ID) === id);
+      if (!eq) return true; // equipo was deleted
+      const key = `${reserva.Fecha}|${reserva.BloqueID}|${id}`;
+      return (equipUsage[key] || 0) > eq.Cantidad;
+    });
+  },
+
   renderWeekGrid() {
     const container = document.getElementById('calendar-grid');
     const monday = this.getMonday(this.currentDate);
     const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
     const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     const todayStr = this.formatDate(new Date());
+    const equipUsage = this.buildEquipUsageMap();
 
     const weekDates = [];
     for (let d = 0; d < 7; d++) {
@@ -561,8 +622,12 @@ const Calendar = {
       ? this.salas.filter(s => s.ID === this.filterSalaId)
       : this.salas;
 
-    const gridClass = visibleSalas.length === 1 ? 'sala-grid sala-grid-single' : 'sala-grid';
-    const h = [`<div class="${gridClass}">`];
+    const n = visibleSalas.length;
+    const cols = n === 1 ? 1 : Math.ceil(n / 2);
+    const rows = n === 1 ? 1 : 2;
+    const gridClass = n === 1 ? 'sala-grid sala-grid-single' : 'sala-grid';
+    const gridStyle = `grid-template-columns: repeat(${cols}, 1fr); grid-template-rows: repeat(${rows}, 1fr);`;
+    const h = [`<div class="${gridClass}" style="${gridStyle}">`];
 
     visibleSalas.forEach(sala => {
       h.push(`<div class="sala-panel">`);
@@ -580,7 +645,7 @@ const Calendar = {
         weekDates.forEach(wd => {
           const reserva = this.getRes(sala.ID, wd.str, block.ID);
           if (reserva) {
-            h.push(this.renderOccupiedCell(reserva));
+            h.push(this.renderOccupiedCell(reserva, equipUsage));
           } else {
             h.push(this.renderFreeCell(sala.ID, wd.str, block.ID, idx));
           }

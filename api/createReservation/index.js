@@ -1,16 +1,21 @@
-const { getUserEmail } = require('../shared/auth');
+const { getAuthenticatedUser } = require('../shared/auth');
 const {
-  getEntity, getByPartition,
+  getByPartition,
   upsertEntity
 } = require('../shared/tableClient');
 
 module.exports = async function (context, req) {
   try {
-    const email = getUserEmail(req);
-    if (!email) {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
       context.res = { status: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No autenticado' }) };
       return;
     }
+    if (user.rol === 'viewer') {
+      context.res = { status: 403, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Sin permisos para reservar' }) };
+      return;
+    }
+    const email = user.email;
 
     const { slots, actividad, recurrenciaGrupo, comentarios, equipos, responsable } = req.body;
 
@@ -19,19 +24,13 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const [user, salasRaw, bloquesRaw, equiposCatalog] = await Promise.all([
-      getEntity('Usuarios', 'usuarios', email),
+    const [salasRaw, bloquesRaw, equiposCatalog] = await Promise.all([
       getByPartition('Salas', 'salas'),
       getByPartition('Bloques', 'bloques'),
       getByPartition('Equipos', 'equipos')
     ]);
 
-    if (!user) {
-      context.res = { status: 403, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Usuario no registrado' }) };
-      return;
-    }
-
-    const nombreReal = user.Nombre;
+    const nombreReal = user.nombre;
     const bloques = bloquesRaw.map(b => ({
       ID: Number(b.rowKey),
       Etiqueta: b.Etiqueta || `${b.HoraInicio} - ${b.HoraFin}`

@@ -69,13 +69,29 @@ const App = {
   },
 
   showApp() {
+    const rol = (this.currentUser.Rol || 'user').toLowerCase();
+
     document.getElementById('login-screen').classList.add('d-none');
     document.getElementById('app-container').classList.remove('d-none');
-    document.getElementById('user-display').textContent = this.currentUser.Nombre;
+    document.getElementById('user-display').textContent = this.currentUser.Nombre + ' [' + (this.currentUser.Rol || 'user') + ']';
+    console.log('showApp currentUser:', JSON.stringify(this.currentUser));
 
-    // Cache modal instances
-    this._modalReservar = new bootstrap.Modal(document.getElementById('reservationModal'));
-    this._modalCancelar = new bootstrap.Modal(document.getElementById('cancelModal'));
+    if (rol === 'viewer') {
+      // Hide "Mis Reservas" tab
+      const misReservasLi = document.getElementById('nav-li-mis-reservas');
+      if (misReservasLi) misReservasLi.style.display = 'none';
+      // Hide config button
+      document.getElementById('btn-config').style.display = 'none';
+      // Hide selection bars and legend-hint
+      document.getElementById('selection-bar').style.display = 'none';
+      document.getElementById('cancel-selection-bar').style.display = 'none';
+      const hint = document.querySelector('.legend-hint');
+      if (hint) hint.style.display = 'none';
+    } else {
+      // Cache modal instances (viewer doesn't need them)
+      this._modalReservar = new bootstrap.Modal(document.getElementById('reservationModal'));
+      this._modalCancelar = new bootstrap.Modal(document.getElementById('cancelModal'));
+    }
 
     this.showView('calendario');
     Calendar.init();
@@ -92,6 +108,13 @@ const App = {
   // ── Navegación ────────────────────────────────────────
 
   showView(name) {
+    const rol = (this.currentUser?.Rol || 'user').toLowerCase();
+
+    // Guards for viewer
+    if (rol === 'viewer' && (name === 'mis-reservas' || name === 'configuracion')) {
+      name = 'calendario';
+    }
+
     document.querySelectorAll('.view-section').forEach(v => v.classList.add('d-none'));
     document.getElementById('view-' + name).classList.remove('d-none');
     document.querySelectorAll('[data-nav]').forEach(l => l.classList.remove('active'));
@@ -99,7 +122,25 @@ const App = {
 
     if (name === 'mis-reservas') this.loadMyReservations();
     if (name === 'resumen-diario') this.loadDailySummary();
-    if (name === 'configuracion') this.loadConfigTab('equipos');
+    if (name === 'configuracion') {
+      this._setupConfigTabs();
+    }
+  },
+
+  _setupConfigTabs() {
+    const rol = (this.currentUser?.Rol || 'user').toLowerCase();
+    console.log('_setupConfigTabs rol:', rol, 'currentUser.Rol:', this.currentUser?.Rol);
+    const allTabs = ['equipos', 'bloques', 'salas', 'usuarios'];
+    const visibleTabs = rol === 'admin' ? allTabs : (rol === 'user' ? ['equipos'] : []);
+
+    allTabs.forEach(tab => {
+      const li = document.getElementById('config-tab-li-' + tab);
+      if (li) li.style.display = visibleTabs.includes(tab) ? '' : 'none';
+    });
+
+    // Load first visible tab
+    const firstTab = visibleTabs[0] || 'equipos';
+    this.showConfigTab(firstTab);
   },
 
   // ── Modal de Reserva ──────────────────────────────────
@@ -630,6 +671,14 @@ const App = {
 
   _renderReadRow(tab, item) {
     const esc = s => this.escapeHtml(s);
+
+    if (tab === 'usuarios') {
+      const btns = `<td>
+        <button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('usuarios','${esc(item.Email)}')">Editar</button>
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('usuarios','${esc(item.Email)}')">Eliminar</button></td>`;
+      return `<tr data-id="${esc(item.Email)}"><td>${esc(item.Email)}</td><td>${esc(item.Nombre)}</td><td>${esc(item.Rol)}</td>${btns}</tr>`;
+    }
+
     const btns = `<td>
       <button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('${tab}',${item.ID})">Editar</button>
       <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('${tab}',${item.ID})">Eliminar</button></td>`;
@@ -644,6 +693,23 @@ const App = {
 
   _renderEditRow(tab, item) {
     const esc = s => this.escapeHtml(s);
+
+    if (tab === 'usuarios') {
+      const email = item ? item.Email : '';
+      const isEdit = !!item;
+      const btns = `<td>
+        <button class="btn btn-success btn-sm py-0 px-1" onclick="App.saveConfig('usuarios','${esc(email)}')">Guardar</button>
+        <button class="btn btn-secondary btn-sm py-0 px-1" onclick="App.cancelEditRow('usuarios')">Cancelar</button></td>`;
+      const rolOptions = ['admin', 'user', 'viewer'].map(r =>
+        `<option value="${r}" ${(item?.Rol || 'user') === r ? 'selected' : ''}>${r}</option>`
+      ).join('');
+      return `<tr class="cfg-editing" data-id="${esc(email)}">
+        <td><input type="email" class="form-control form-control-sm" data-field="Email" value="${esc(email)}" ${isEdit ? 'readonly' : ''} placeholder="email@ucsc.cl"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="Nombre" value="${esc(item?.Nombre || '')}"></td>
+        <td><select class="form-select form-select-sm" data-field="Rol">${rolOptions}</select></td>
+        ${btns}</tr>`;
+    }
+
     const id = item ? item.ID : '';
     const btns = `<td>
       <button class="btn btn-success btn-sm py-0 px-1" onclick="App.saveConfig('${tab}',${id || 'null'})">Guardar</button>
@@ -672,9 +738,13 @@ const App = {
   },
 
   async loadConfigTab(tab) {
-    // Use data already loaded by fullInit (Calendar), with API fallback
     let items;
-    if (tab === 'equipos' && Calendar.equipos?.length) {
+    if (tab === 'usuarios') {
+      // Always fetch from API (no Calendar cache for users)
+      const res = await Api.configManager(tab, 'list');
+      if (!res.ok) { this.showToast(res.error || 'Error cargando usuarios', 'error'); return; }
+      items = res.data;
+    } else if (tab === 'equipos' && Calendar.equipos?.length) {
       items = Calendar.equipos;
     } else if (tab === 'bloques' && Calendar.bloques?.length) {
       items = Calendar.bloques;
@@ -687,8 +757,9 @@ const App = {
     }
 
     const tbody = document.getElementById('config-' + tab + '-list');
-    const colSpan = tab === 'salas' ? 4 : 5;
-    const emptyLabels = { equipos: 'Sin equipos', bloques: 'Sin bloques', salas: 'Sin salas' };
+    const colSpans = { equipos: 5, bloques: 5, salas: 4, usuarios: 4 };
+    const colSpan = colSpans[tab] || 5;
+    const emptyLabels = { equipos: 'Sin equipos', bloques: 'Sin bloques', salas: 'Sin salas', usuarios: 'Sin usuarios' };
 
     tbody.innerHTML = items.map(item => this._renderReadRow(tab, item)).join('')
       || `<tr><td colspan="${colSpan}" class="text-muted text-center">${emptyLabels[tab]}</td></tr>`;
@@ -705,14 +776,20 @@ const App = {
   },
 
   editConfig(tab, id) {
-    const item = (this._configData || []).find(i => i.ID === id);
+    let item;
+    if (tab === 'usuarios') {
+      item = (this._configData || []).find(i => i.Email === id);
+    } else {
+      item = (this._configData || []).find(i => i.ID === id);
+    }
     if (!item) return;
     const tbody = document.getElementById('config-' + tab + '-list');
     // Cancel any other editing row
     const existing = tbody.querySelector('tr.cfg-editing');
     if (existing) existing.remove();
     // Replace the target row with an edit row
-    const row = tbody.querySelector(`tr[data-id="${id}"]`);
+    const selector = tab === 'usuarios' ? `tr[data-id="${item.Email}"]` : `tr[data-id="${id}"]`;
+    const row = tbody.querySelector(selector);
     if (row) {
       row.outerHTML = this._renderEditRow(tab, item);
       tbody.querySelector('tr.cfg-editing input')?.focus();
@@ -728,10 +805,22 @@ const App = {
     const editRow = tbody.querySelector('tr.cfg-editing');
     if (!editRow) return;
 
-    const val = field => (editRow.querySelector(`input[data-field="${field}"]`)?.value || '').trim();
+    const val = field => {
+      const input = editRow.querySelector(`input[data-field="${field}"], select[data-field="${field}"]`);
+      return (input?.value || '').trim();
+    };
 
     let data = {};
-    if (tab === 'equipos') {
+
+    if (tab === 'usuarios') {
+      data = {
+        Email: val('Email'),
+        Nombre: val('Nombre'),
+        Rol: val('Rol') || 'user'
+      };
+      if (!data.Email) { this.showToast('Ingresa el email', 'warning'); return; }
+      if (!data.Nombre) { this.showToast('Ingresa el nombre', 'warning'); return; }
+    } else if (tab === 'equipos') {
       data = {
         ID: rowId || null,
         Nombre: val('Nombre'),
@@ -761,7 +850,12 @@ const App = {
       const res = await Api.configManager(tab, 'save', data);
       if (res.ok) {
         this.showToast('Guardado', 'success');
-        await this._reloadConfigAndCalendar(tab);
+        if (res.warning) this.showToast(res.warning, 'warning');
+        if (tab === 'usuarios') {
+          this.loadConfigTab(tab);
+        } else {
+          await this._reloadConfigAndCalendar(tab);
+        }
       } else {
         this.showToast(res.error || 'Error al guardar', 'error');
       }
@@ -774,10 +868,16 @@ const App = {
   async deleteConfig(tab, id) {
     if (!confirm('¿Eliminar este registro?')) return;
     try {
-      const res = await Api.configManager(tab, 'delete', { ID: id });
+      const data = tab === 'usuarios' ? { Email: id } : { ID: id };
+      const res = await Api.configManager(tab, 'delete', data);
       if (res.ok) {
         this.showToast('Eliminado', 'success');
-        await this._reloadConfigAndCalendar(tab);
+        if (res.warning) this.showToast(res.warning, 'warning');
+        if (tab === 'usuarios') {
+          this.loadConfigTab(tab);
+        } else {
+          await this._reloadConfigAndCalendar(tab);
+        }
       } else {
         this.showToast(res.error || 'Error al eliminar', 'error');
       }
