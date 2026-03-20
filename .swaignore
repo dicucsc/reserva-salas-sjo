@@ -1,0 +1,10 @@
+~$*
+*.xlsx
+*.csv
+*.zip
+.git
+.gitignore
+*.md
+deploy.sh
+swa-cli.config.json
+.api_deploy

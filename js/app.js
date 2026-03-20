@@ -897,6 +897,112 @@ const App = {
     }
   },
 
+  async importUsuariosFile(input) {
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      if (rows.length === 0) { this.showToast('El archivo está vacío', 'warning'); return; }
+
+      const first = rows[0];
+      const keys = Object.keys(first);
+      const findCol = (...names) => keys.find(k => names.includes(k.toLowerCase()));
+      const colNombre = findCol('nombre', 'name', 'nombres');
+      const colEmail = findCol('email', 'correo', 'mail', 'e-mail');
+
+      if (!colNombre || !colEmail) { this.showToast('El archivo debe tener columnas "Nombre" y "Email"', 'error'); return; }
+
+      this._importPending = rows
+        .map(r => ({ Nombre: String(r[colNombre]).trim(), Email: String(r[colEmail]).trim().toLowerCase() }))
+        .filter(u => u.Nombre && u.Email);
+
+      if (this._importPending.length === 0) { this.showToast('No se encontraron usuarios válidos', 'warning'); return; }
+
+      // Render checkboxes in modal
+      const container = document.getElementById('import-usuarios-list');
+      container.innerHTML = this._importPending.map((u, i) =>
+        `<div class="form-check">
+          <input class="form-check-input import-user-check" type="checkbox" id="imp-${i}" value="${i}" checked>
+          <label class="form-check-label" for="imp-${i}" style="font-size:0.8125rem">
+            <strong>${this.escapeHtml(u.Nombre)}</strong> <span class="text-muted">— ${this.escapeHtml(u.Email)}</span>
+          </label>
+        </div>`
+      ).join('');
+      this._importUpdateCount();
+
+      if (!this._modalImportar) {
+        this._modalImportar = new bootstrap.Modal(document.getElementById('importUsuariosModal'));
+      }
+      this._modalImportar.show();
+    } catch (e) {
+      console.error('Import error:', e);
+      this.showToast('Error al leer el archivo: ' + e.message, 'error');
+    }
+  },
+
+  _importToggleAll(checked) {
+    document.querySelectorAll('.import-user-check').forEach(cb => cb.checked = checked);
+    this._importUpdateCount();
+  },
+
+  _importUpdateCount() {
+    const total = document.querySelectorAll('.import-user-check').length;
+    const selected = document.querySelectorAll('.import-user-check:checked').length;
+    document.getElementById('import-count').textContent = `${selected} de ${total} seleccionados`;
+  },
+
+  async _importConfirm() {
+    const selected = [];
+    document.querySelectorAll('.import-user-check:checked').forEach(cb => {
+      selected.push(this._importPending[Number(cb.value)]);
+    });
+
+    if (selected.length === 0) { this.showToast('Selecciona al menos un usuario', 'warning'); return; }
+
+    const btn = document.getElementById('btn-import-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Importando...';
+
+    let ok = 0, errors = 0;
+    for (const u of selected) {
+      try {
+        const rol = document.getElementById('import-rol-select').value;
+        const res = await Api.configManager('usuarios', 'save', { Email: u.Email, Nombre: u.Nombre, Rol: rol });
+        if (res.ok) ok++; else errors++;
+      } catch (e) { errors++; }
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Importar seleccionados';
+    this._modalImportar.hide();
+    this.showToast(`Importados: ${ok}${errors > 0 ? ', errores: ' + errors : ''}`, ok > 0 ? 'success' : 'error');
+    this.loadConfigTab('usuarios');
+  },
+
+  async deleteNonAdminUsers() {
+    const res = await Api.configManager('usuarios', 'list');
+    if (!res.ok) { this.showToast(res.error || 'Error cargando usuarios', 'error'); return; }
+    const nonAdmin = res.data.filter(u => (u.Rol || 'user') !== 'admin');
+    if (nonAdmin.length === 0) { this.showToast('No hay usuarios no-admin para borrar', 'warning'); return; }
+    if (!confirm(`¿Borrar ${nonAdmin.length} usuario(s) no-admin?\n\n${nonAdmin.map(u => u.Nombre + ' — ' + u.Email).join('\n')}`)) return;
+
+    let ok = 0, errors = 0;
+    for (const u of nonAdmin) {
+      try {
+        const r = await Api.configManager('usuarios', 'delete', { Email: u.Email });
+        if (r.ok) ok++; else errors++;
+      } catch (e) { errors++; }
+    }
+    this.showToast(`Eliminados: ${ok}${errors > 0 ? ', errores: ' + errors : ''}`, ok > 0 ? 'success' : 'error');
+    this.loadConfigTab('usuarios');
+  },
+
   async deleteConfig(tab, id) {
     if (!confirm('¿Eliminar este registro?')) return;
     try {

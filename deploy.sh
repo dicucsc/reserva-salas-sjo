@@ -13,6 +13,12 @@ echo "Cache busters updated to ?v=$BUILD_VERSION"
 # Instalar deps del API (node_modules se sube con SKIP_API_BUILD=true)
 cd api && npm install --omit=dev && cd ..
 
+# Move non-web files out temporarily (StaticSitesClient zips everything)
+TMPDIR_DEPLOY=$(mktemp -d)
+for f in *.xlsx *.csv ~\$*; do
+  [ -e "$f" ] && mv "$f" "$TMPDIR_DEPLOY/" 2>/dev/null || true
+done
+
 # Deploy desde directorio PADRE (evita bug de paths de swa deploy)
 cd D:/Research
 
@@ -29,5 +35,12 @@ CONFIG_FILE_LOCATION="." \
 FUNCTION_LANGUAGE="node" \
 FUNCTION_LANGUAGE_VERSION="20" \
 "$HOME/.swa/deploy/08e29138cd3dcda4ffda6d587aa580028110c1c7/StaticSitesClient.exe"
+DEPLOY_EXIT=$?
+
+# Restore files
+cd "$(dirname "$0")"
+mv "$TMPDIR_DEPLOY"/* . 2>/dev/null || true
+rmdir "$TMPDIR_DEPLOY" 2>/dev/null || true
 
 echo "Deploy complete. Build version: $BUILD_VERSION"
+exit $DEPLOY_EXIT
