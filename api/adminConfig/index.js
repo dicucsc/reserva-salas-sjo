@@ -12,7 +12,8 @@ module.exports = async function (context, req) {
 
     const cfg = TABLES[resource];
     if (!cfg) {
-      return { status: 400, body: { ok: false, error: 'Recurso inválido' } };
+      context.res = { status: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Recurso inválido' }) };
+      return;
     }
 
     if (action === 'list') {
@@ -26,7 +27,8 @@ module.exports = async function (context, req) {
         });
         return item;
       }).sort((a, b) => a.ID - b.ID);
-      return { body: { ok: true, data: items } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true, data: items }) };
+      return;
     }
 
     if (action === 'save') {
@@ -40,34 +42,50 @@ module.exports = async function (context, req) {
       const entity = { partitionKey: cfg.pk, rowKey: String(id) };
 
       if (resource === 'equipos') {
-        if (!data.Nombre) return { status: 400, body: { ok: false, error: 'Nombre requerido' } };
+        if (!data.Nombre) {
+          context.res = { status: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Nombre requerido' }) };
+          return;
+        }
         entity.Nombre = data.Nombre;
         entity.Descripcion = data.Descripcion || '';
         entity.Cantidad = Number(data.Cantidad) || 1;
       } else if (resource === 'bloques') {
-        if (!data.HoraInicio || !data.HoraFin) return { status: 400, body: { ok: false, error: 'Horas requeridas' } };
+        if (!data.HoraInicio || !data.HoraFin) {
+          context.res = { status: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Horas requeridas' }) };
+          return;
+        }
         entity.HoraInicio = data.HoraInicio;
         entity.HoraFin = data.HoraFin;
         entity.Etiqueta = data.Etiqueta || `${data.HoraInicio} - ${data.HoraFin}`;
       } else if (resource === 'salas') {
-        if (!data.Nombre) return { status: 400, body: { ok: false, error: 'Nombre requerido' } };
+        if (!data.Nombre) {
+          context.res = { status: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Nombre requerido' }) };
+          return;
+        }
         entity.Nombre = data.Nombre;
         entity.Capacidad = Number(data.Capacidad) || 0;
       }
 
       await upsertEntity(cfg.table, entity);
-      return { body: { ok: true, data: { ID: id } } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true, data: { ID: id } }) };
+      return;
     }
 
     if (action === 'delete') {
-      if (!data.ID) return { status: 400, body: { ok: false, error: 'ID requerido' } };
+      if (!data.ID) {
+        context.res = { status: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'ID requerido' }) };
+        return;
+      }
       await deleteEntity(cfg.table, cfg.pk, String(data.ID));
-      return { body: { ok: true } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true }) };
+      return;
     }
 
-    return { status: 400, body: { ok: false, error: 'Acción inválida' } };
+    context.res = { status: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Acción inválida' }) };
+    return;
   } catch (err) {
     context.log.error('adminConfig error:', err);
-    return { status: 500, body: { ok: false, error: err.message } };
+    context.res = { status: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: err.message }) };
+    return;
   }
 };

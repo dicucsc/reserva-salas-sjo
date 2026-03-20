@@ -8,13 +8,15 @@ module.exports = async function (context, req) {
   try {
     const email = getUserEmail(req);
     if (!email) {
-      return { status: 401, body: { ok: false, error: 'No autenticado' } };
+      context.res = { status: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No autenticado' }) };
+      return;
     }
 
     const { slots, actividad, recurrenciaGrupo, comentarios, equipos, responsable } = req.body;
 
     if (!slots || !slots.length) {
-      return { body: { ok: false, error: 'Faltan campos obligatorios' } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Faltan campos obligatorios' }) };
+      return;
     }
 
     const [user, salasRaw, bloquesRaw, equiposCatalog] = await Promise.all([
@@ -25,7 +27,8 @@ module.exports = async function (context, req) {
     ]);
 
     if (!user) {
-      return { status: 403, body: { ok: false, error: 'Usuario no registrado' } };
+      context.res = { status: 403, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Usuario no registrado' }) };
+      return;
     }
 
     const nombreReal = user.Nombre;
@@ -53,12 +56,15 @@ module.exports = async function (context, req) {
       );
       if (conflict) {
         const bloque = bloques.find(b => b.ID === Number(s.bloqueId));
-        return {
-          body: {
+        context.res = {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             ok: false,
             error: `Ya reservado: ${s.fecha} ${bloque ? bloque.Etiqueta : 'Bloque ' + s.bloqueId}`
-          }
+          })
         };
+        return;
       }
     }
 
@@ -76,7 +82,8 @@ module.exports = async function (context, req) {
         for (const eqId of equiposArr) {
           const equipo = equiposCatalog.find(e => e.rowKey === String(eqId));
           if (!equipo) {
-            return { body: { ok: false, error: `Equipo no encontrado: ${eqId}` } };
+            context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: `Equipo no encontrado: ${eqId}` }) };
+            return;
           }
 
           const cantidadTotal = Number(equipo.Cantidad);
@@ -88,12 +95,15 @@ module.exports = async function (context, req) {
 
           if (usados >= cantidadTotal) {
             const bloque = bloques.find(b => b.ID === Number(sg.bloqueId));
-            return {
-              body: {
+            context.res = {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
                 ok: false,
                 error: `Equipo "${equipo.Nombre}" no disponible: ${sg.fecha} ${bloque ? bloque.Etiqueta : 'Bloque ' + sg.bloqueId}`
-              }
+              })
             };
+            return;
           }
         }
       }
@@ -150,12 +160,16 @@ module.exports = async function (context, req) {
 
     await Promise.all(allWrites);
 
-    return {
-      body: { ok: true, data: { ids: createdIds, count: createdIds.length } }
+    context.res = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true, data: { ids: createdIds, count: createdIds.length } })
     };
+    return;
   } catch (err) {
     context.log.error('createReservation error:', err);
-    return { status: 500, body: { ok: false, error: err.message } };
+    context.res = { status: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: err.message }) };
+    return;
   }
 };
 

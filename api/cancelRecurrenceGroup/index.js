@@ -5,13 +5,15 @@ module.exports = async function (context, req) {
   try {
     const email = getUserEmail(req);
     if (!email) {
-      return { status: 401, body: { ok: false, error: 'No autenticado' } };
+      context.res = { status: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No autenticado' }) };
+      return;
     }
 
     const { recurrenciaGrupo } = req.body;
 
     if (!recurrenciaGrupo) {
-      return { body: { ok: false, error: 'Falta recurrenciaGrupo' } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Falta recurrenciaGrupo' }) };
+      return;
     }
 
     const now = new Date();
@@ -24,7 +26,8 @@ module.exports = async function (context, req) {
     );
 
     if (matching.length === 0) {
-      return { body: { ok: false, error: 'No se encontraron reservas del grupo' } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No se encontraron reservas del grupo' }) };
+      return;
     }
 
     const deletedIds = new Set(matching.map(r => r.rowKey));
@@ -40,9 +43,11 @@ module.exports = async function (context, req) {
 
     await Promise.all(deleteOps);
 
-    return { body: { ok: true, data: { canceladas: matching.length } } };
+    context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true, data: { canceladas: matching.length } }) };
+    return;
   } catch (err) {
     context.log.error('cancelRecurrenceGroup error:', err);
-    return { status: 500, body: { ok: false, error: err.message } };
+    context.res = { status: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: err.message }) };
+    return;
   }
 };

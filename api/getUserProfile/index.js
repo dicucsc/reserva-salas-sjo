@@ -5,26 +5,32 @@ module.exports = async function (context, req) {
   try {
     const email = getUserEmail(req);
     if (!email) {
-      return { status: 401, body: { ok: false, error: 'No autenticado' } };
+      context.res = { status: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No autenticado' }) };
+      return;
     }
 
     const user = await getEntity('Usuarios', 'usuarios', email);
     if (!user) {
-      return { status: 403, body: { ok: false, error: 'Usuario no registrado. Contacta al administrador.' } };
+      context.res = { status: 403, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Usuario no registrado. Contacta al administrador.' }) };
+      return;
     }
 
-    return {
-      body: {
+    context.res = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         ok: true,
         data: {
           Email: user.rowKey,
           Nombre: user.Nombre,
           Rol: user.Rol || 'user'
         }
-      }
+      })
     };
+    return;
   } catch (err) {
     context.log.error('getUserProfile error:', err);
-    return { status: 500, body: { ok: false, error: err.message } };
+    context.res = { status: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: err.message }) };
+    return;
   }
 };

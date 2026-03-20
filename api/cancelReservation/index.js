@@ -5,13 +5,15 @@ module.exports = async function (context, req) {
   try {
     const email = getUserEmail(req);
     if (!email) {
-      return { status: 401, body: { ok: false, error: 'No autenticado' } };
+      context.res = { status: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'No autenticado' }) };
+      return;
     }
 
     const { reservaId, fecha } = req.body;
 
     if (!reservaId) {
-      return { body: { ok: false, error: 'Falta reservaId' } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Falta reservaId' }) };
+      return;
     }
 
     const month = fecha ? fecha.substring(0, 7) : null;
@@ -22,7 +24,8 @@ module.exports = async function (context, req) {
     }
 
     if (!reserva || (reserva.Email || '').trim().toLowerCase() !== email) {
-      return { body: { ok: false, error: 'Reserva no encontrada o email no coincide' } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Reserva no encontrada o email no coincide' }) };
+      return;
     }
 
     const deleteOps = [deleteEntity('Reservas', reserva.partitionKey, reserva.rowKey)];
@@ -35,9 +38,11 @@ module.exports = async function (context, req) {
 
     await Promise.all(deleteOps);
 
-    return { body: { ok: true } };
+    context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true }) };
+    return;
   } catch (err) {
     context.log.error('cancelReservation error:', err);
-    return { status: 500, body: { ok: false, error: err.message } };
+    context.res = { status: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: err.message }) };
+    return;
   }
 };

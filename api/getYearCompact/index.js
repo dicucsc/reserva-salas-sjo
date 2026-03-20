@@ -4,14 +4,17 @@ module.exports = async function (context, req) {
   try {
     const year = Number(req.query.year);
     if (!year) {
-      return { body: { ok: false, error: 'Falta parámetro year' } };
+      context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Falta parámetro year' }) };
+      return;
     }
 
     const data = await buildYearCompact(year);
-    return { body: { ok: true, data } };
+    context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true, data }) };
+    return;
   } catch (err) {
     context.log.error('getYearCompact error:', err);
-    return { status: 500, body: { ok: false, error: err.message } };
+    context.res = { status: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: err.message }) };
+    return;
   }
 };
 

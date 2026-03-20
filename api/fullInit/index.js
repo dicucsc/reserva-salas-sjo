@@ -28,9 +28,11 @@ module.exports = async function (context, req) {
       Cantidad: Number(e.Cantidad)
     })).sort((a, b) => a.ID - b.ID);
 
-    return { body: { ok: true, data: { salas, bloques, equipos } } };
+    context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true, data: { salas, bloques, equipos } }) };
+    return;
   } catch (err) {
     context.log.error('fullInit error:', err);
-    return { status: 500, body: { ok: false, error: err.message } };
+    context.res = { status: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: err.message }) };
+    return;
   }
 };
