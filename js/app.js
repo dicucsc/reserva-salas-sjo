@@ -681,7 +681,7 @@ const App = {
     } else if (tab === 'salas' && Calendar.salas?.length) {
       items = Calendar.salas;
     } else {
-      const res = await Api.adminConfig(tab, 'list');
+      const res = await Api.configManager(tab, 'list');
       if (!res.ok) { this.showToast(res.error || 'Error cargando datos', 'error'); return; }
       items = res.data;
     }
@@ -758,7 +758,7 @@ const App = {
     }
 
     try {
-      const res = await Api.adminConfig(tab, 'save', data);
+      const res = await Api.configManager(tab, 'save', data);
       if (res.ok) {
         this.showToast('Guardado', 'success');
         await this._reloadConfigAndCalendar(tab);
@@ -774,7 +774,7 @@ const App = {
   async deleteConfig(tab, id) {
     if (!confirm('¿Eliminar este registro?')) return;
     try {
-      const res = await Api.adminConfig(tab, 'delete', { ID: id });
+      const res = await Api.configManager(tab, 'delete', { ID: id });
       if (res.ok) {
         this.showToast('Eliminado', 'success');
         await this._reloadConfigAndCalendar(tab);
