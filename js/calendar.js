@@ -242,6 +242,8 @@ const Calendar = {
     this.lastClicked = null;
     this.updateSelectionUI();
     this.updateSelectionBar();
+    // Clear any browser native selection (from Ctrl+click)
+    window.getSelection()?.removeAllRanges();
   },
 
   isSelected(salaId, fecha, bloqueId) {
@@ -365,87 +367,6 @@ const Calendar = {
     this.updateSelectionBar();
   },
 
-  // ── Recurrence ────────────────────────────────────────
-
-  toggleRecurrence() {
-    const options = document.getElementById('recurrence-options');
-    const btn = document.getElementById('btn-recurrence');
-    const isHidden = options.classList.contains('d-none');
-    options.classList.toggle('d-none', !isHidden);
-    btn.classList.toggle('active', isHidden);
-
-    if (isHidden) {
-      const until = new Date();
-      until.setDate(until.getDate() + 21);
-      document.getElementById('recurrence-until').value = this.formatDate(until);
-    }
-  },
-
-  async applyRecurrence() {
-    if (this.selection.length === 0) return;
-
-    const untilStr = document.getElementById('recurrence-until').value;
-    if (!untilStr) { alert('Selecciona una fecha límite'); return; }
-
-    const patterns = {};
-    this.selection.forEach(s => {
-      const d = new Date(s.fecha + 'T12:00:00');
-      const dayOfWeek = d.getDay();
-      const key = `${s.salaId}|${s.bloqueId}|${dayOfWeek}`;
-      if (!patterns[key]) {
-        patterns[key] = { salaId: s.salaId, salaName: s.salaName, bloqueId: s.bloqueId, bloqueLabel: s.bloqueLabel, dayOfWeek, startDate: s.fecha };
-      }
-      if (s.fecha < patterns[key].startDate) patterns[key].startDate = s.fecha;
-    });
-
-    const untilDate = new Date(untilStr + 'T12:00:00');
-
-    const untilYear = untilDate.getFullYear();
-    if (untilYear !== this.loadedYear) {
-      const res = await Api.getYearCompact(untilYear);
-      if (res.ok) {
-        const extra = this.expandCompact(res.data);
-        const existingIds = new Set(this.allReservations.map(r => r.ID));
-        extra.forEach(r => {
-          if (!existingIds.has(r.ID)) this.allReservations.push(r);
-        });
-        this.buildResMap();
-      }
-    }
-
-    let added = 0;
-    Object.values(patterns).forEach(p => {
-      const cursor = new Date(p.startDate + 'T12:00:00');
-      cursor.setDate(cursor.getDate() + 7);
-
-      while (cursor <= untilDate) {
-        const dateStr = this.formatDate(cursor);
-        const salaId = p.salaId;
-        const bloqueId = p.bloqueId;
-
-        if (!this.isSelected(salaId, dateStr, bloqueId)) {
-          if (!this.getRes(salaId, dateStr, bloqueId)) {
-            this.selection.push({
-              salaId, salaName: p.salaName, fecha: dateStr, bloqueId, bloqueLabel: p.bloqueLabel
-            });
-            added++;
-          }
-        }
-        cursor.setDate(cursor.getDate() + 7);
-      }
-    });
-
-    document.getElementById('recurrence-options').classList.add('d-none');
-    document.getElementById('btn-recurrence').classList.remove('active');
-    this.updateSelectionUI();
-    this.updateSelectionBar();
-
-    if (added > 0) {
-      App.showToast(`${added} bloque(s) agregados semanalmente hasta ${untilStr}`, 'success');
-    } else {
-      App.showToast('No se encontraron bloques libres adicionales', 'warning');
-    }
-  },
 
   // ── Data loading ──────────────────────────────────────
 

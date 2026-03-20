@@ -379,14 +379,18 @@ const App = {
 
   async cancelSingle(id, fecha) {
     if (!confirm('¿Cancelar esta reserva?')) return;
-    const res = await Api.cancelReservation(id, fecha);
-    if (res.ok) {
-      this.showToast('Reserva cancelada', 'success');
-      await Calendar.reloadData();
-      Calendar.render();
-      this.loadMyReservations();
-    } else {
-      this.showToast(res.error || 'Error', 'error');
+    try {
+      const res = await Api.cancelReservation(id, fecha);
+      if (res.ok) {
+        this.showToast('Reserva cancelada', 'success');
+        await Calendar.reloadData();
+        Calendar.render();
+        this.loadMyReservations();
+      } else {
+        this.showToast(res.error || 'Error al cancelar', 'error');
+      }
+    } catch (e) {
+      this.showToast('Error de conexión al cancelar', 'error');
     }
   },
 
@@ -411,10 +415,16 @@ const App = {
     const sala = Calendar.salas.find(s => s.ID === reserva.SalaID);
     const bloque = Calendar.bloques.find(b => b.ID === reserva.BloqueID);
 
-    document.getElementById('edit-res-info').innerHTML =
-      `<strong>${this.escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${this.escapeHtml(reserva.Fecha)} — ${this.escapeHtml(bloque?.Etiqueta || '')}<br>
+    let infoHtml = `<strong>${this.escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${this.escapeHtml(reserva.Fecha)} — ${this.escapeHtml(bloque?.Etiqueta || '')}<br>
        <small class="text-muted">Reservado por: ${this.escapeHtml(reserva.Nombre)}</small>`;
 
+    // Show recurrence badge if part of a group
+    if (reserva.Recurrencia) {
+      const groupCount = Calendar.allReservations.filter(r => r.Recurrencia === reserva.Recurrencia).length;
+      infoHtml += `<br><span class="badge bg-primary mt-1">Recurrente (${groupCount} bloques)</span>`;
+    }
+
+    document.getElementById('edit-res-info').innerHTML = infoHtml;
     document.getElementById('edit-res-actividad').value = reserva.Actividad || '';
     document.getElementById('edit-res-responsable').value = reserva.Responsable || reserva.Nombre || '';
     document.getElementById('edit-res-comentarios').value = reserva.Comentarios || '';
@@ -501,9 +511,31 @@ const App = {
   },
 
   deleteFromEdit() {
-    if (!confirm('¿Cancelar esta reserva?')) return;
-    this._modalEditar.hide();
-    this.cancelSingle(this._editReserva.ID, this._editReserva.Fecha);
+    const reserva = this._editReserva;
+    if (!reserva) return;
+
+    if (reserva.Recurrencia) {
+      const groupCount = Calendar.allReservations.filter(r => r.Recurrencia === reserva.Recurrencia).length;
+      const choice = prompt(
+        `Esta reserva es parte de un grupo recurrente (${groupCount} bloques).\n\n` +
+        'Escribe "todas" para cancelar TODAS las del grupo,\n' +
+        'o "esta" para cancelar solo esta reserva:',
+        'esta'
+      );
+      if (!choice) return;
+      const normalized = choice.trim().toLowerCase();
+      if (normalized === 'todas') {
+        this._modalEditar.hide();
+        this.cancelRecurrenceGroup(reserva.Recurrencia);
+      } else if (normalized === 'esta') {
+        this._modalEditar.hide();
+        this.cancelSingle(reserva.ID, reserva.Fecha);
+      }
+    } else {
+      if (!confirm('¿Cancelar esta reserva?')) return;
+      this._modalEditar.hide();
+      this.cancelSingle(reserva.ID, reserva.Fecha);
+    }
   },
 
   // ── Equipment Checkboxes ────────────────────────────
