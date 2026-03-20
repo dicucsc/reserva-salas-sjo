@@ -92,10 +92,48 @@ const Calendar = {
 
   setupEventDelegation() {
     const container = document.getElementById('calendar-grid');
-    container.addEventListener('click', e => {
-      const rol = (App.currentUser?.Rol || 'user').toLowerCase();
+    let dragSelecting = false;
+    let didDrag = false;
 
-      // Viewer: no interactions
+    // Ctrl+mousedown: start drag-select
+    container.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const rol = (App.currentUser?.Rol || 'user').toLowerCase();
+      if (rol === 'viewer') return;
+
+      const freeCell = e.target.closest('[data-sala][data-fecha][data-bloque]:not([data-res-id])');
+      if (!freeCell) return;
+
+      e.preventDefault(); // Prevent native text/cell selection during drag
+      dragSelecting = true;
+      didDrag = false;
+      this._selectFreeCell(freeCell);
+    });
+
+    // While dragging, select every free cell the mouse enters
+    container.addEventListener('mouseover', e => {
+      if (!dragSelecting) return;
+      const freeCell = e.target.closest('[data-sala][data-fecha][data-bloque]:not([data-res-id])');
+      if (!freeCell) return;
+      didDrag = true;
+      this._selectFreeCell(freeCell);
+    });
+
+    // End drag on mouseup (listen on document so it works even if mouse leaves grid)
+    document.addEventListener('mouseup', () => {
+      dragSelecting = false;
+    });
+
+    // Regular click (no Ctrl): toggle cell or open edit modal
+    container.addEventListener('click', e => {
+      // Skip click if we just finished a Ctrl+drag
+      if (didDrag || (e.ctrlKey || e.metaKey)) {
+        didDrag = false;
+        return;
+      }
+
+      const rol = (App.currentUser?.Rol || 'user').toLowerCase();
       if (rol === 'viewer') return;
 
       const freeCell = e.target.closest('[data-sala][data-fecha][data-bloque]:not([data-res-id])');
@@ -126,6 +164,18 @@ const Calendar = {
         }
       }
     });
+  },
+
+  _selectFreeCell(td) {
+    const salaId = Number(td.dataset.sala);
+    const fecha = td.dataset.fecha;
+    const bloqueId = Number(td.dataset.bloque);
+    if (this.isSelected(salaId, fecha, bloqueId)) return;
+    const sala = this.salas.find(s => s.ID === salaId);
+    const bloque = this.bloques.find(b => b.ID === bloqueId);
+    this.selection.push({ salaId, salaName: sala?.Nombre || '', fecha, bloqueId, bloqueLabel: bloque?.Etiqueta || '' });
+    this.updateSelectionUI();
+    this.updateSelectionBar();
   },
 
   buildSalaFilters() {
@@ -242,8 +292,6 @@ const Calendar = {
     this.lastClicked = null;
     this.updateSelectionUI();
     this.updateSelectionBar();
-    // Clear any browser native selection (from Ctrl+click)
-    window.getSelection()?.removeAllRanges();
   },
 
   isSelected(salaId, fecha, bloqueId) {
@@ -486,7 +534,7 @@ const Calendar = {
     return `<td class="cell-free ${sel ? 'cell-selected' : ''}"
       data-sel="${salaId}-${dateStr}-${blockId}"
       data-sala="${salaId}" data-fecha="${dateStr}" data-bloque="${blockId}" data-idx="${blockIndex}"
-      title="Click para seleccionar (Shift+click para rango)">
+      title="Click = seleccionar | Shift+click = rango | Ctrl+arrastrar = selección múltiple">
     </td>`;
   },
 
