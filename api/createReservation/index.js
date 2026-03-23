@@ -157,12 +157,21 @@ module.exports = async function (context, req) {
       }
     }
 
-    await Promise.all(allWrites);
+    const results = await Promise.allSettled(allWrites);
+    const failures = results.filter(r => r.status === 'rejected');
+
+    if (failures.length > 0) {
+      context.log.error('Partial write failures:', failures.map(f => f.reason?.message));
+    }
 
     context.res = {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, data: { ids: createdIds, count: createdIds.length } })
+      body: JSON.stringify({
+        ok: true,
+        data: { ids: createdIds, count: createdIds.length },
+        ...(failures.length > 0 && { warning: `${failures.length} escritura(s) fallaron parcialmente` })
+      })
     };
     return;
   } catch (err) {
@@ -173,5 +182,6 @@ module.exports = async function (context, req) {
 };
 
 function generateId() {
-  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  const crypto = require('crypto');
+  return Date.now() * 1000 + crypto.randomBytes(2).readUInt16BE(0) % 1000;
 }

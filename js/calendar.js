@@ -14,9 +14,12 @@ const Calendar = {
   _resMap: new Map(),
 
   selection: [],
+  _selectionSet: new Set(),
   lastClicked: null,
   cancelSelection: [],
   filterSalaId: null,
+  _equipUsageCache: null,
+  _lastReloadTs: 0,
 
   formatDate(d) {
     if (d instanceof Date) {
@@ -94,13 +97,13 @@ const Calendar = {
     const container = document.getElementById('calendar-grid');
     let dragSelecting = false;
     let didDrag = false;
+    let lastDragCell = null;
 
     // Ctrl+mousedown: start drag-select
     container.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
       if (!(e.ctrlKey || e.metaKey)) return;
-      const rol = (App.currentUser?.Rol || 'user').toLowerCase();
-      if (rol === 'viewer') return;
+      if (App.userRole === 'viewer') return;
 
       const freeCell = e.target.closest('[data-sala][data-fecha][data-bloque]:not([data-res-id])');
       if (!freeCell) return;
@@ -108,6 +111,7 @@ const Calendar = {
       e.preventDefault(); // Prevent native text/cell selection during drag
       dragSelecting = true;
       didDrag = false;
+      lastDragCell = null;
       this._selectFreeCell(freeCell);
     });
 
@@ -115,7 +119,8 @@ const Calendar = {
     container.addEventListener('mouseover', e => {
       if (!dragSelecting) return;
       const freeCell = e.target.closest('[data-sala][data-fecha][data-bloque]:not([data-res-id])');
-      if (!freeCell) return;
+      if (!freeCell || freeCell === lastDragCell) return;
+      lastDragCell = freeCell;
       didDrag = true;
       this._selectFreeCell(freeCell);
     });
@@ -123,6 +128,7 @@ const Calendar = {
     // End drag on mouseup (listen on document so it works even if mouse leaves grid)
     document.addEventListener('mouseup', () => {
       dragSelecting = false;
+      lastDragCell = null;
     });
 
     // Regular click (no Ctrl): toggle cell or open edit modal
@@ -133,8 +139,7 @@ const Calendar = {
         return;
       }
 
-      const rol = (App.currentUser?.Rol || 'user').toLowerCase();
-      if (rol === 'viewer') return;
+      if (App.userRole === 'viewer') return;
 
       const freeCell = e.target.closest('[data-sala][data-fecha][data-bloque]:not([data-res-id])');
       if (freeCell) {
@@ -174,6 +179,7 @@ const Calendar = {
     const sala = this.salas.find(s => s.ID === salaId);
     const bloque = this.bloques.find(b => b.ID === bloqueId);
     this.selection.push({ salaId, salaName: sala?.Nombre || '', fecha, bloqueId, bloqueLabel: bloque?.Etiqueta || '' });
+    this._selectionSet.add(`${salaId}-${fecha}-${bloqueId}`);
     this.updateSelectionUI();
     this.updateSelectionBar();
   },
@@ -184,7 +190,7 @@ const Calendar = {
 
     let html = '<span class="text-muted" style="font-size:0.75rem">Vista:</span>';
     this.salas.forEach(sala => {
-      html += `<button class="btn btn-outline-secondary btn-sm btn-sala-filter" data-sala-id="${sala.ID}">${this.escapeHtml(sala.Nombre)}</button>`;
+      html += `<button class="btn btn-outline-secondary btn-sm btn-sala-filter" data-sala-id="${sala.ID}">${escapeHtml(sala.Nombre)}</button>`;
     });
     html += '<button class="btn btn-secondary btn-sm btn-sala-filter active" data-sala-id="all">Todos</button>';
     container.innerHTML = html;
@@ -237,6 +243,7 @@ const Calendar = {
 
   buildResMap() {
     this._resMap = new Map();
+    this._equipUsageCache = null;
     this.allReservations.forEach(r => {
       this._resMap.set(`${r.SalaID}-${r.Fecha}-${r.BloqueID}`, r);
     });
@@ -269,35 +276,36 @@ const Calendar = {
     this._resMap = new Map();
   },
 
-  async reloadData() {
-    const year = this.currentDate.getFullYear();
-    const res = await Api.getYearCompact(year);
-    if (res.ok) {
-      this.allReservations = this.expandCompact(res.data);
-      this.loadedYear = year;
-      this.buildResMap();
+  async reloadData(force) {
+    const now = Date.now();
+    if (!force && now - this._lastReloadTs < 5000) return;
+    try {
+      const year = this.currentDate.getFullYear();
+      const res = await Api.getYearCompact(year);
+      if (res.ok) {
+        this.allReservations = this.expandCompact(res.data);
+        this.loadedYear = year;
+        this.buildResMap();
+      }
+      this._lastReloadTs = Date.now();
+    } catch (e) {
+      console.error('reloadData error:', e);
+      App.showToast('Error al refrescar datos', 'warning');
     }
-  },
-
-  escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   },
 
   // ── Selection (reservar) ──────────────────────────────
 
   clearSelection() {
     this.selection = [];
+    this._selectionSet.clear();
     this.lastClicked = null;
     this.updateSelectionUI();
     this.updateSelectionBar();
   },
 
   isSelected(salaId, fecha, bloqueId) {
-    return this.selection.some(s =>
-      s.salaId === salaId && s.fecha === fecha && s.bloqueId === bloqueId
-    );
+    return this._selectionSet.has(`${salaId}-${fecha}-${bloqueId}`);
   },
 
   toggleCell(salaId, salaName, fecha, bloqueId, bloqueLabel, blockIndex, event) {
@@ -312,6 +320,7 @@ const Calendar = {
         const bId = block.ID;
         if (!this.getRes(salaId, fecha, bId) && !this.isSelected(salaId, fecha, bId)) {
           this.selection.push({ salaId, salaName, fecha, bloqueId: bId, bloqueLabel: block.Etiqueta });
+          this._selectionSet.add(`${salaId}-${fecha}-${bId}`);
         }
       }
     } else {
@@ -320,8 +329,10 @@ const Calendar = {
       );
       if (idx >= 0) {
         this.selection.splice(idx, 1);
+        this._selectionSet.delete(`${salaId}-${fecha}-${bloqueId}`);
       } else {
         this.selection.push({ salaId, salaName, fecha, bloqueId, bloqueLabel });
+        this._selectionSet.add(`${salaId}-${fecha}-${bloqueId}`);
       }
     }
 
@@ -358,8 +369,8 @@ const Calendar = {
       const lines = Object.values(groups).map(g => {
         const bloques = g.bloques
           .sort((a, b) => a.bloqueId - b.bloqueId)
-          .map(s => s.bloqueLabel).join(', ');
-        return `<strong>${g.salaName}</strong> — ${g.fecha} — ${g.bloques.length} bloque(s): ${bloques}`;
+          .map(s => escapeHtml(s.bloqueLabel)).join(', ');
+        return `<strong>${escapeHtml(g.salaName)}</strong> — ${escapeHtml(g.fecha)} — ${g.bloques.length} bloque(s): ${bloques}`;
       });
       document.getElementById('sel-info').innerHTML =
         `${this.selection.length} bloque(s) seleccionado(s):<br>` + lines.join('<br>');
@@ -379,8 +390,8 @@ const Calendar = {
       const lines = Object.values(groups).map(g => {
         const bloques = g.bloques
           .sort((a, b) => a.bloqueId - b.bloqueId)
-          .map(s => s.bloqueLabel).join(', ');
-        return `<strong>${g.salaName}</strong> — ${g.fecha} — ${g.bloques.length} bloque(s): ${bloques}`;
+          .map(s => escapeHtml(s.bloqueLabel)).join(', ');
+        return `<strong>${escapeHtml(g.salaName)}</strong> — ${escapeHtml(g.fecha)} — ${g.bloques.length} bloque(s): ${bloques}`;
       });
       document.getElementById('cancel-sel-info').innerHTML =
         `${this.cancelSelection.length} reserva(s) para cancelar:<br>` + lines.join('<br>');
@@ -478,21 +489,20 @@ const Calendar = {
   },
 
   renderOccupiedCell(reserva, equipUsage) {
-    const rol = (App.currentUser?.Rol || 'user').toLowerCase();
+    const rol = App.userRole;
     const isMine = App.isMyEmail(reserva.Email);
     const isAdmin = rol === 'admin';
     const isViewer = rol === 'viewer';
-    const act = this.escapeHtml(reserva.Actividad || 'Reservado');
-    const displayName = this.escapeHtml(reserva.Responsable || reserva.Nombre || '');
-    const resp = this.escapeHtml(reserva.Responsable || reserva.Nombre || '');
-    const nombre = this.escapeHtml(reserva.Nombre || '');
+    const act = escapeHtml(reserva.Actividad || 'Reservado');
+    const displayName = escapeHtml(reserva.Responsable || reserva.Nombre || '');
+    const nombre = escapeHtml(reserva.Nombre || '');
     const warnCls = equipUsage && this.hasEquipWarning(reserva, equipUsage) ? ' cell-equip-warn' : '';
     const warnIcon = warnCls ? '<span class="equip-warn-icon" title="Equipo insuficiente">⚠</span>' : '';
 
     // Viewer: all cells are plain occupied, no interaction
     if (isViewer) {
       const cls = isMine ? 'cell-mine' : 'cell-occupied';
-      return `<td class="${cls}${warnCls}" title="${act} — Resp: ${resp} — Reservó: ${nombre}">
+      return `<td class="${cls}${warnCls}" title="${act} — Resp: ${displayName} — Reservó: ${nombre}">
         <div class="cell-inner">${warnIcon}<div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
       </td>`;
     }
@@ -503,7 +513,7 @@ const Calendar = {
       return `<td class="cell-mine ${cancelSel}${warnCls}"
         data-cancel-sel="${reserva.ID}"
         data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
-        title="${act} — Resp: ${resp} — Reservó: ${nombre} — Click para editar, Shift+click para cancelar">
+        title="${act} — Resp: ${displayName} — Reservó: ${nombre} — Click para editar, Shift+click para cancelar">
         <div class="cell-inner">${warnIcon}<div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
       </td>`;
     }
@@ -514,19 +524,19 @@ const Calendar = {
       return `<td class="cell-occupied cell-admin-editable ${cancelSel}${warnCls}"
         data-cancel-sel="${reserva.ID}"
         data-res-id="${reserva.ID}" data-sala="${reserva.SalaID}" data-fecha="${reserva.Fecha}" data-bloque="${reserva.BloqueID}"
-        title="${act} — Resp: ${resp} — Reservó: ${nombre} — Click para editar, Shift+click para cancelar">
+        title="${act} — Resp: ${displayName} — Reservó: ${nombre} — Click para editar, Shift+click para cancelar">
         <div class="cell-inner">${warnIcon}<div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
       </td>`;
     }
 
     // Regular user: other people's reservations are not clickable
-    return `<td class="cell-occupied${warnCls}" title="${act} — Resp: ${resp} — Reservó: ${nombre}">
+    return `<td class="cell-occupied${warnCls}" title="${act} — Resp: ${displayName} — Reservó: ${nombre}">
       <div class="cell-inner">${warnIcon}<div class="cell-act">${act}</div><div class="cell-name">${displayName}</div></div>
     </td>`;
   },
 
   renderFreeCell(salaId, dateStr, blockId, blockIndex) {
-    const rol = (App.currentUser?.Rol || 'user').toLowerCase();
+    const rol = App.userRole;
     if (rol === 'viewer') {
       return `<td class="cell-free cell-readonly"></td>`;
     }
@@ -541,24 +551,22 @@ const Calendar = {
   // ── Week Grid (2×2) ───────────────────────────────────
 
   buildEquipUsageMap() {
+    if (this._equipUsageCache) return this._equipUsageCache;
     const usage = {};
     this.allReservations.forEach(r => {
       if (!r.Equipos) return;
-      r.Equipos.split(',').forEach(eqId => {
-        const id = eqId.trim();
-        if (!id) return;
+      parseEquipos(r.Equipos).forEach(id => {
         const key = `${r.Fecha}|${r.BloqueID}|${id}`;
         usage[key] = (usage[key] || 0) + 1;
       });
     });
+    this._equipUsageCache = usage;
     return usage;
   },
 
   hasEquipWarning(reserva, equipUsage) {
     if (!reserva.Equipos) return false;
-    return reserva.Equipos.split(',').some(eqId => {
-      const id = eqId.trim();
-      if (!id) return false;
+    return parseEquipos(reserva.Equipos).some(id => {
       const eq = this.equipos.find(e => String(e.ID) === id);
       if (!eq) return true; // equipo was deleted
       const key = `${reserva.Fecha}|${reserva.BloqueID}|${id}`;

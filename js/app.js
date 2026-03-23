@@ -25,10 +25,8 @@ const App = {
 
   // ── Helpers ───────────────────────────────────────
 
-  escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+  get userRole() {
+    return (this.currentUser?.Rol || 'user').toLowerCase();
   },
 
   isMyEmail(email) {
@@ -69,7 +67,7 @@ const App = {
   },
 
   showApp() {
-    const rol = (this.currentUser.Rol || 'user').toLowerCase();
+    const rol = this.userRole;
 
     document.getElementById('login-screen').classList.add('d-none');
     document.getElementById('app-container').classList.remove('d-none');
@@ -108,7 +106,7 @@ const App = {
   // ── Navegación ────────────────────────────────────────
 
   showView(name) {
-    const rol = (this.currentUser?.Rol || 'user').toLowerCase();
+    const rol = this.userRole;
 
     // Guards for viewer
     if (rol === 'viewer' && (name === 'mis-reservas' || name === 'configuracion')) {
@@ -128,7 +126,7 @@ const App = {
   },
 
   _setupConfigTabs() {
-    const rol = (this.currentUser?.Rol || 'user').toLowerCase();
+    const rol = this.userRole;
     console.log('_setupConfigTabs rol:', rol, 'currentUser.Rol:', this.currentUser?.Rol);
     const allTabs = ['equipos', 'bloques', 'salas', 'usuarios'];
     const visibleTabs = rol === 'admin' ? allTabs : (rol === 'user' ? ['equipos'] : []);
@@ -148,6 +146,10 @@ const App = {
   openMultiReservation(selections) {
     this._reservationSelections = selections;
 
+    // Remove any previous conflict detail
+    const conflictEl = document.getElementById('res-conflict-detail');
+    if (conflictEl) conflictEl.remove();
+
     // Summary
     const groups = {};
     selections.forEach(s => {
@@ -157,7 +159,7 @@ const App = {
     });
 
     let infoHtml = Object.values(groups).map(g =>
-      `<strong>${g.salaName}</strong> — ${g.fecha} — ${g.bloques.join(', ')}`
+      `<strong>${escapeHtml(g.salaName)}</strong> — ${escapeHtml(g.fecha)} — ${g.bloques.map(b => escapeHtml(b)).join(', ')}`
     ).join('<br>');
 
     document.getElementById('res-slots-info').innerHTML = infoHtml;
@@ -187,6 +189,10 @@ const App = {
   async confirmReservation() {
     const actividad = document.getElementById('res-actividad').value.trim();
     if (!actividad) { this.showToast('Ingresa la actividad', 'warning'); return; }
+    if (actividad.length > 200) { this.showToast('Actividad: máximo 200 caracteres', 'warning'); return; }
+
+    const responsable = document.getElementById('res-responsable').value.trim() || this.currentUser.Nombre;
+    if (responsable.length > 100) { this.showToast('Responsable: máximo 100 caracteres', 'warning'); return; }
 
     let allSlots = this._reservationSelections.map(s => ({
       salaId: s.salaId, fecha: s.fecha, bloqueId: s.bloqueId
@@ -227,9 +233,46 @@ const App = {
 
     const btn = document.getElementById('btn-res-confirm');
     btn.disabled = true;
+    btn.textContent = 'Verificando disponibilidad...';
+
+    // Pre-check: reload fresh data and verify all slots are free
+    await Calendar.reloadData(true);
+    const conflicts = [];
+    for (const s of allSlots) {
+      const existing = Calendar.getRes(s.salaId, s.fecha, s.bloqueId);
+      if (existing) {
+        const sala = Calendar.salas.find(l => l.ID === s.salaId);
+        const bloque = Calendar.bloques.find(b => b.ID === s.bloqueId);
+        conflicts.push({
+          sala: sala?.Nombre || 'Sala ' + s.salaId,
+          fecha: s.fecha,
+          bloque: bloque?.Etiqueta || 'Bloque ' + s.bloqueId,
+          actividad: existing.Actividad,
+          responsable: existing.Responsable || existing.Nombre
+        });
+      }
+    }
+
+    if (conflicts.length > 0) {
+      const detail = conflicts.map(c =>
+        `<li><strong>${escapeHtml(c.sala)}</strong> — ${escapeHtml(c.fecha)} — ${escapeHtml(c.bloque)}<br>` +
+        `<small class="text-muted">${escapeHtml(c.actividad)} (${escapeHtml(c.responsable)})</small></li>`
+      ).join('');
+      let alertEl = document.getElementById('res-conflict-detail');
+      if (!alertEl) {
+        alertEl = document.createElement('div');
+        alertEl.id = 'res-conflict-detail';
+        document.querySelector('#reservationModal .modal-body').prepend(alertEl);
+      }
+      alertEl.className = 'alert alert-danger';
+      alertEl.innerHTML = `<strong>Slots no disponibles:</strong><ul class="mb-0 mt-1">${detail}</ul>`;
+      btn.disabled = false;
+      btn.textContent = 'Confirmar Reserva';
+      return;
+    }
+
     btn.textContent = 'Reservando...';
 
-    const responsable = document.getElementById('res-responsable').value.trim() || this.currentUser.Nombre;
     const comentarios = document.getElementById('res-comentarios').value.trim();
     const equipos = [];
     document.querySelectorAll('#res-equipos-container input[type="checkbox"]:checked').forEach(cb => {
@@ -250,7 +293,7 @@ const App = {
         this.showToast(`Reserva confirmada (${allSlots.length} bloque${allSlots.length > 1 ? 's' : ''})`, 'success');
         this._modalReservar.hide();
         Calendar.clearSelection();
-        await Calendar.reloadData();
+        await Calendar.reloadData(true);
         Calendar.render();
       } else {
         this.showToast(res.error || 'Error al reservar', 'error');
@@ -271,7 +314,7 @@ const App = {
 
     const h = ['<p>¿Cancelar estas reservas?</p><ul>'];
     this._cancelItems.forEach(s => {
-      h.push(`<li><strong>${s.salaName}</strong> — ${s.fecha} — ${s.bloqueLabel}</li>`);
+      h.push(`<li><strong>${escapeHtml(s.salaName)}</strong> — ${escapeHtml(s.fecha)} — ${escapeHtml(s.bloqueLabel)}</li>`);
     });
     h.push('</ul>');
     document.getElementById('cancel-modal-body').innerHTML = h.join('');
@@ -297,7 +340,7 @@ const App = {
 
       this._modalCancelar.hide();
       Calendar.clearCancelSelection();
-      await Calendar.reloadData();
+      await Calendar.reloadData(true);
       Calendar.render();
     } catch (e) {
       this.showToast('Error de conexión', 'error');
@@ -345,9 +388,9 @@ const App = {
           <div class="d-flex justify-content-between align-items-start mb-2">
             <div>
               <span class="badge bg-primary">Recurrente (${reservas.length} bloques)</span>
-              <h6 class="mt-1 mb-0">${this.escapeHtml(sala?.Nombre || 'Sala')} — ${this.escapeHtml(reservas[0].Actividad)}</h6>
+              <h6 class="mt-1 mb-0">${escapeHtml(sala?.Nombre || 'Sala')} — ${escapeHtml(reservas[0].Actividad)}</h6>
             </div>
-            <button class="btn btn-outline-danger btn-sm" onclick="App.cancelRecurrenceGroup('${this.escapeHtml(groupId)}')">Cancelar grupo</button>
+            <button class="btn btn-outline-danger btn-sm" onclick="App.cancelRecurrenceGroup('${escapeHtml(groupId)}')">Cancelar grupo</button>
           </div>
           <ul class="mb-0" style="font-size:0.8125rem">
             ${reservas.map(r => {
@@ -366,8 +409,8 @@ const App = {
       h.push(`<div class="card mb-2">
         <div class="card-body d-flex justify-content-between align-items-center">
           <div>
-            <strong>${this.escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${this.escapeHtml(r.Fecha)} — ${this.escapeHtml(bl?.Etiqueta || '')}
-            <br><small class="text-muted">${this.escapeHtml(r.Actividad)}</small>
+            <strong>${escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${escapeHtml(r.Fecha)} — ${escapeHtml(bl?.Etiqueta || '')}
+            <br><small class="text-muted">${escapeHtml(r.Actividad)}</small>
           </div>
           <button class="btn btn-outline-danger btn-sm" onclick="App.cancelSingle(${r.ID},'${r.Fecha}')">Cancelar</button>
         </div>
@@ -383,7 +426,7 @@ const App = {
       const res = await Api.cancelReservation(id, fecha);
       if (res.ok) {
         this.showToast('Reserva cancelada', 'success');
-        await Calendar.reloadData();
+        await Calendar.reloadData(true);
         Calendar.render();
         this.loadMyReservations();
       } else {
@@ -399,7 +442,7 @@ const App = {
     const res = await Api.cancelRecurrenceGroup(groupId);
     if (res.ok) {
       this.showToast(`${res.data.canceladas} reservas canceladas`, 'success');
-      await Calendar.reloadData();
+      await Calendar.reloadData(true);
       Calendar.render();
       this.loadMyReservations();
     } else {
@@ -415,8 +458,8 @@ const App = {
     const sala = Calendar.salas.find(s => s.ID === reserva.SalaID);
     const bloque = Calendar.bloques.find(b => b.ID === reserva.BloqueID);
 
-    let infoHtml = `<strong>${this.escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${this.escapeHtml(reserva.Fecha)} — ${this.escapeHtml(bloque?.Etiqueta || '')}<br>
-       <small class="text-muted">Reservado por: ${this.escapeHtml(reserva.Nombre)}</small>`;
+    let infoHtml = `<strong>${escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${escapeHtml(reserva.Fecha)} — ${escapeHtml(bloque?.Etiqueta || '')}<br>
+       <small class="text-muted">Reservado por: ${escapeHtml(reserva.Nombre)}</small>`;
 
     // Show recurrence badge if part of a group
     if (reserva.Recurrencia) {
@@ -438,7 +481,7 @@ const App = {
 
   populateEditEquipmentCheckboxes(currentEquipos) {
     const container = document.getElementById('edit-res-equipos-container');
-    const selectedIds = currentEquipos ? currentEquipos.split(',').map(id => id.trim()) : [];
+    const selectedIds = parseEquipos(currentEquipos);
     const reserva = this._editReserva;
 
     if (Calendar.equipos.length === 0) {
@@ -446,19 +489,10 @@ const App = {
       return;
     }
 
-    // Calculate usage for this slot (excluding current reservation)
-    const maxUsage = {};
-    Calendar.equipos.forEach(eq => {
-      let used = 0;
-      Calendar.allReservations.forEach(r => {
-        if (r.Fecha === reserva.Fecha && r.BloqueID === reserva.BloqueID && r.ID !== reserva.ID && r.Equipos) {
-          if (r.Equipos.split(',').map(x => x.trim()).includes(String(eq.ID))) {
-            used++;
-          }
-        }
-      });
-      maxUsage[eq.ID] = used;
-    });
+    const maxUsage = calcEquipUsageForSlots(
+      [{ Fecha: reserva.Fecha, BloqueID: reserva.BloqueID }],
+      Calendar.allReservations, Calendar.equipos, reserva.ID
+    );
 
     container.innerHTML = Calendar.equipos.map(eq => {
       const isSelected = selectedIds.includes(String(eq.ID));
@@ -475,6 +509,11 @@ const App = {
   },
 
   async saveEditReservation() {
+    const actividad = document.getElementById('edit-res-actividad').value.trim();
+    if (actividad.length > 200) { this.showToast('Actividad: máximo 200 caracteres', 'warning'); return; }
+    const responsable = document.getElementById('edit-res-responsable').value.trim();
+    if (responsable.length > 100) { this.showToast('Responsable: máximo 100 caracteres', 'warning'); return; }
+
     const btn = document.getElementById('btn-edit-confirm');
     btn.disabled = true;
     btn.textContent = 'Guardando...';
@@ -488,8 +527,8 @@ const App = {
       const res = await Api.updateReservation({
         reservaId: this._editReserva.ID,
         fecha: this._editReserva.Fecha,
-        actividad: document.getElementById('edit-res-actividad').value.trim(),
-        responsable: document.getElementById('edit-res-responsable').value.trim(),
+        actividad,
+        responsable,
         comentarios: document.getElementById('edit-res-comentarios').value.trim(),
         equipos
       });
@@ -497,7 +536,7 @@ const App = {
       if (res.ok) {
         this.showToast('Reserva actualizada', 'success');
         this._modalEditar.hide();
-        await Calendar.reloadData();
+        await Calendar.reloadData(true);
         Calendar.render();
       } else {
         this.showToast(res.error || 'Error al actualizar', 'error');
@@ -547,23 +586,8 @@ const App = {
       return;
     }
 
-    // Get max usage across all selected slots for each equipment
     const slots = this._reservationSelections || [];
-    const maxUsage = {};
-    Calendar.equipos.forEach(eq => { maxUsage[eq.ID] = 0; });
-    slots.forEach(s => {
-      Calendar.equipos.forEach(eq => {
-        let used = 0;
-        Calendar.allReservations.forEach(r => {
-          if (r.Fecha === s.fecha && r.BloqueID === s.bloqueId && r.Equipos) {
-            if (r.Equipos.split(',').map(x => x.trim()).includes(String(eq.ID))) {
-              used++;
-            }
-          }
-        });
-        if (used > maxUsage[eq.ID]) maxUsage[eq.ID] = used;
-      });
-    });
+    const maxUsage = calcEquipUsageForSlots(slots, Calendar.allReservations, Calendar.equipos);
 
     container.innerHTML = Calendar.equipos.map(eq => {
       const available = eq.Cantidad - maxUsage[eq.ID];
@@ -624,17 +648,17 @@ const App = {
 
         salaReservas.forEach(r => {
           const bloque = Calendar.bloques.find(b => b.ID === r.BloqueID);
-          const eqNames = r.Equipos ? r.Equipos.split(',').map(id => {
-            const eq = Calendar.equipos.find(e => String(e.ID) === id.trim());
+          const eqNames = r.Equipos ? parseEquipos(r.Equipos).map(id => {
+            const eq = Calendar.equipos.find(e => String(e.ID) === id);
             return eq ? eq.Nombre : '';
           }).filter(Boolean).join(', ') : '';
 
           h.push(`<tr>
-            <td><strong>${this.escapeHtml(bloque ? bloque.Etiqueta : '')}</strong></td>
-            <td>${this.escapeHtml(r.Actividad || '')}</td>
-            <td>${this.escapeHtml(r.Responsable || r.Nombre)}</td>
-            <td>${this.escapeHtml(r.Comentarios || '')}</td>
-            <td>${this.escapeHtml(eqNames)}</td>
+            <td><strong>${escapeHtml(bloque ? bloque.Etiqueta : '')}</strong></td>
+            <td>${escapeHtml(r.Actividad || '')}</td>
+            <td>${escapeHtml(r.Responsable || r.Nombre)}</td>
+            <td>${escapeHtml(r.Comentarios || '')}</td>
+            <td>${escapeHtml(eqNames)}</td>
           </tr>`);
         });
 
@@ -650,9 +674,7 @@ const App = {
     const eqTotals = {};
     reservas.forEach(r => {
       if (r.Equipos) {
-        r.Equipos.split(',').forEach(eqId => {
-          const id = eqId.trim();
-          if (!id) return;
+        parseEquipos(r.Equipos).forEach(id => {
           const eq = Calendar.equipos.find(e => String(e.ID) === id);
           const name = eq ? eq.Nombre : 'Equipo ' + id;
           eqTotals[name] = (eqTotals[name] || 0) + 1;
@@ -680,7 +702,7 @@ const App = {
     el.className = 'toast align-items-center text-white border-0 show';
     el.style.background = bg;
     el.setAttribute('role', 'alert');
-    el.innerHTML = `<div class="d-flex"><div class="toast-body">${this.escapeHtml(message)}</div>
+    el.innerHTML = `<div class="d-flex"><div class="toast-body">${escapeHtml(message)}</div>
       <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button></div>`;
 
     container.appendChild(el);
@@ -702,7 +724,7 @@ const App = {
   },
 
   _renderReadRow(tab, item) {
-    const esc = s => this.escapeHtml(s);
+    const esc = s => escapeHtml(s);
 
     if (tab === 'usuarios') {
       const btns = `<td>
@@ -724,7 +746,7 @@ const App = {
   },
 
   _renderEditRow(tab, item) {
-    const esc = s => this.escapeHtml(s);
+    const esc = s => escapeHtml(s);
 
     if (tab === 'usuarios') {
       const email = item ? item.Email : '';
@@ -851,6 +873,7 @@ const App = {
         Rol: val('Rol') || 'user'
       };
       if (!data.Email) { this.showToast('Ingresa el email', 'warning'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.Email)) { this.showToast('Email no válido', 'warning'); return; }
       if (!data.Nombre) { this.showToast('Ingresa el nombre', 'warning'); return; }
     } else if (tab === 'equipos') {
       data = {
@@ -930,7 +953,7 @@ const App = {
         `<div class="form-check">
           <input class="form-check-input import-user-check" type="checkbox" id="imp-${i}" value="${i}" checked>
           <label class="form-check-label" for="imp-${i}" style="font-size:0.8125rem">
-            <strong>${this.escapeHtml(u.Nombre)}</strong> <span class="text-muted">— ${this.escapeHtml(u.Email)}</span>
+            <strong>${escapeHtml(u.Nombre)}</strong> <span class="text-muted">— ${escapeHtml(u.Email)}</span>
           </label>
         </div>`
       ).join('');
