@@ -9,18 +9,81 @@ const App = {
   _modalCancelar: null,
 
   async init() {
-    document.querySelectorAll('[data-nav]').forEach(el => {
-      el.onclick = (e) => {
-        e.preventDefault();
-        this.showView(el.dataset.nav);
-      };
-    });
-
-    document.getElementById('btn-login').onclick = () => Auth.login();
-    document.getElementById('btn-logout').onclick = () => this.logout();
+    this.bindEvents();
 
     // Try auto-login via SWA auth
     await this.tryAutoLogin();
+  },
+
+  bindEvents() {
+    // Navbar navigation
+    document.querySelectorAll('[data-nav]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.showView(el.dataset.nav);
+      });
+    });
+
+    document.getElementById('btn-login').addEventListener('click', () => Auth.login());
+    document.getElementById('btn-logout').addEventListener('click', () => this.logout());
+
+    // Simple button clicks
+    const click = (id, fn) => document.getElementById(id)?.addEventListener('click', fn);
+    click('btn-config', () => this.showView('configuracion'));
+    click('btn-clear-sel', () => Calendar.clearSelection());
+    click('btn-reserve-sel', () => Calendar.openSelectionReservation());
+    click('btn-clear-cancel-sel', () => Calendar.clearCancelSelection());
+    click('btn-bulk-cancel', () => this.openBulkCancel());
+    click('btn-summary-prev', () => this.shiftSummaryDate(-1));
+    click('btn-summary-next', () => this.shiftSummaryDate(1));
+    click('btn-res-confirm', () => this.confirmReservation());
+    click('btn-cancel-confirm', () => this.confirmCancel());
+    click('btn-edit-delete', () => this.deleteFromEdit());
+    click('btn-edit-confirm', () => this.saveEditReservation());
+    click('btn-import-all', () => this._importToggleAll(true));
+    click('btn-import-none', () => this._importToggleAll(false));
+    click('btn-import-confirm', () => this._importConfirm());
+    click('btn-import-xlsx', () => document.getElementById('xlsx-import-input').click());
+    click('btn-delete-nonadmin', () => this.deleteNonAdminUsers());
+
+    // Inputs
+    document.getElementById('xlsx-import-input')?.addEventListener('change', e => this.importUsuariosFile(e.target));
+    document.getElementById('res-recurrence-check')?.addEventListener('change', () => this.toggleResRecurrence());
+
+    // Config tabs — delegation on #config-tabs
+    document.getElementById('config-tabs')?.addEventListener('click', e => {
+      const link = e.target.closest('[data-tab]');
+      if (link) { e.preventDefault(); this.showConfigTab(link.dataset.tab, e); }
+    });
+
+    // "+ Agregar" buttons — delegation on #view-configuracion
+    document.getElementById('view-configuracion')?.addEventListener('click', e => {
+      const addBtn = e.target.closest('[data-add]');
+      if (addBtn) this.addConfigRow(addBtn.dataset.add);
+    });
+
+    // Config table rows — delegation for edit/delete/save/cancel
+    ['equipos', 'bloques', 'salas', 'usuarios'].forEach(tab => {
+      document.getElementById('config-' + tab + '-list')?.addEventListener('click', e => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const tr = btn.closest('tr');
+        const id = tr?.dataset.id;
+        if (action === 'editConfig') this.editConfig(this._configTab, this._configTab === 'usuarios' ? id : Number(id));
+        else if (action === 'deleteConfig') this.deleteConfig(this._configTab, this._configTab === 'usuarios' ? id : Number(id));
+        else if (action === 'saveConfig') this.saveConfig(this._configTab, this._configTab === 'usuarios' ? id : (id ? Number(id) : null));
+        else if (action === 'cancelEditRow') this.cancelEditRow(this._configTab);
+      });
+    });
+
+    // My Reservations — delegation for cancel buttons
+    document.getElementById('my-reservations-list')?.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      if (btn.dataset.action === 'cancelGroup') this.cancelRecurrenceGroup(btn.dataset.group);
+      else if (btn.dataset.action === 'cancelSingle') this.cancelSingle(Number(btn.dataset.resId), btn.dataset.fecha);
+    });
   },
 
   // ── Helpers ───────────────────────────────────────
@@ -235,8 +298,18 @@ const App = {
     btn.disabled = true;
     btn.textContent = 'Verificando disponibilidad...';
 
-    // Pre-check: reload fresh data and verify all slots are free
-    await Calendar.reloadData(true);
+    // Determine all years covered by the slots (recurrence may span year boundary)
+    const slotYears = [...new Set(allSlots.map(s => Number(s.fecha.substring(0, 4))))];
+
+    // Pre-check: reload fresh data for all needed years
+    const reloadOk = await Calendar.reloadData(true, slotYears);
+    if (!reloadOk) {
+      this.showToast('No se pudo verificar disponibilidad. Revisa tu conexión e intenta de nuevo.', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Confirmar Reserva';
+      return;
+    }
+
     const conflicts = [];
     for (const s of allSlots) {
       const existing = Calendar.getRes(s.salaId, s.fecha, s.bloqueId);
@@ -390,7 +463,7 @@ const App = {
               <span class="badge bg-primary">Recurrente (${reservas.length} bloques)</span>
               <h6 class="mt-1 mb-0">${escapeHtml(sala?.Nombre || 'Sala')} — ${escapeHtml(reservas[0].Actividad)}</h6>
             </div>
-            <button class="btn btn-outline-danger btn-sm" onclick="App.cancelRecurrenceGroup('${escapeHtml(groupId)}')">Cancelar grupo</button>
+            <button class="btn btn-outline-danger btn-sm" data-action="cancelGroup" data-group="${escapeHtml(groupId)}">Cancelar grupo</button>
           </div>
           <ul class="mb-0" style="font-size:0.8125rem">
             ${reservas.map(r => {
@@ -412,7 +485,7 @@ const App = {
             <strong>${escapeHtml(sala?.Nombre || 'Sala')}</strong> — ${escapeHtml(r.Fecha)} — ${escapeHtml(bl?.Etiqueta || '')}
             <br><small class="text-muted">${escapeHtml(r.Actividad)}</small>
           </div>
-          <button class="btn btn-outline-danger btn-sm" onclick="App.cancelSingle(${r.ID},'${r.Fecha}')">Cancelar</button>
+          <button class="btn btn-outline-danger btn-sm" data-action="cancelSingle" data-res-id="${r.ID}" data-fecha="${r.Fecha}">Cancelar</button>
         </div>
       </div>`);
     });
@@ -703,7 +776,8 @@ const App = {
     el.style.background = bg;
     el.setAttribute('role', 'alert');
     el.innerHTML = `<div class="d-flex"><div class="toast-body">${escapeHtml(message)}</div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button></div>`;
+      <button type="button" class="btn-close btn-close-white me-2 m-auto"></button></div>`;
+    el.querySelector('.btn-close').addEventListener('click', () => el.remove());
 
     container.appendChild(el);
     setTimeout(() => el.remove(), 4000);
@@ -717,7 +791,7 @@ const App = {
     if (event) event.preventDefault();
     document.querySelectorAll('#config-tabs .nav-link').forEach(l => l.classList.remove('active'));
     document.querySelectorAll('.config-tab').forEach(t => t.classList.add('d-none'));
-    document.querySelector(`#config-tabs .nav-link[onclick*="${tab}"]`)?.classList.add('active');
+    document.querySelector(`#config-tabs .nav-link[data-tab="${tab}"]`)?.classList.add('active');
     document.getElementById('config-tab-' + tab)?.classList.remove('d-none');
     this._configTab = tab;
     this.loadConfigTab(tab);
@@ -728,14 +802,14 @@ const App = {
 
     if (tab === 'usuarios') {
       const btns = `<td>
-        <button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('usuarios','${esc(item.Email)}')">Editar</button>
-        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('usuarios','${esc(item.Email)}')">Eliminar</button></td>`;
+        <button class="btn btn-outline-primary btn-sm py-0 px-1" data-action="editConfig">Editar</button>
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" data-action="deleteConfig">Eliminar</button></td>`;
       return `<tr data-id="${esc(item.Email)}"><td>${esc(item.Email)}</td><td>${esc(item.Nombre)}</td><td>${esc(item.Rol)}</td>${btns}</tr>`;
     }
 
     const btns = `<td>
-      <button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="App.editConfig('${tab}',${item.ID})">Editar</button>
-      <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="App.deleteConfig('${tab}',${item.ID})">Eliminar</button></td>`;
+      <button class="btn btn-outline-primary btn-sm py-0 px-1" data-action="editConfig">Editar</button>
+      <button class="btn btn-outline-danger btn-sm py-0 px-1" data-action="deleteConfig">Eliminar</button></td>`;
     if (tab === 'equipos') {
       return `<tr data-id="${item.ID}"><td>${item.ID}</td><td>${esc(item.Nombre)}</td><td>${esc(item.Descripcion || '')}</td><td>${item.Cantidad}</td>${btns}</tr>`;
     } else if (tab === 'bloques') {
@@ -752,8 +826,8 @@ const App = {
       const email = item ? item.Email : '';
       const isEdit = !!item;
       const btns = `<td>
-        <button class="btn btn-success btn-sm py-0 px-1" onclick="App.saveConfig('usuarios','${esc(email)}')">Guardar</button>
-        <button class="btn btn-secondary btn-sm py-0 px-1" onclick="App.cancelEditRow('usuarios')">Cancelar</button></td>`;
+        <button class="btn btn-success btn-sm py-0 px-1" data-action="saveConfig">Guardar</button>
+        <button class="btn btn-secondary btn-sm py-0 px-1" data-action="cancelEditRow">Cancelar</button></td>`;
       const rolOptions = ['admin', 'user', 'viewer'].map(r =>
         `<option value="${r}" ${(item?.Rol || 'user') === r ? 'selected' : ''}>${r}</option>`
       ).join('');
@@ -766,8 +840,8 @@ const App = {
 
     const id = item ? item.ID : '';
     const btns = `<td>
-      <button class="btn btn-success btn-sm py-0 px-1" onclick="App.saveConfig('${tab}',${id || 'null'})">Guardar</button>
-      <button class="btn btn-secondary btn-sm py-0 px-1" onclick="App.cancelEditRow('${tab}')">Cancelar</button></td>`;
+      <button class="btn btn-success btn-sm py-0 px-1" data-action="saveConfig">Guardar</button>
+      <button class="btn btn-secondary btn-sm py-0 px-1" data-action="cancelEditRow">Cancelar</button></td>`;
     if (tab === 'equipos') {
       return `<tr class="cfg-editing" data-id="${id}">
         <td>${id || '<small class="text-muted">Nuevo</small>'}</td>
