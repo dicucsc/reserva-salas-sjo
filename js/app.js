@@ -49,6 +49,11 @@ const App = {
     // Inputs
     document.getElementById('xlsx-import-input')?.addEventListener('change', e => this.importUsuariosFile(e.target));
     document.getElementById('res-recurrence-check')?.addEventListener('change', () => this.toggleResRecurrence());
+    document.getElementById('summary-full-view')?.addEventListener('change', () => {
+      this._summaryFullView = document.getElementById('summary-full-view').checked;
+      const picker = document.getElementById('summary-date-picker');
+      if (picker.value) this.renderDailySummary(picker.value);
+    });
 
     // Config tabs — delegation on #config-tabs
     document.getElementById('config-tabs')?.addEventListener('click', e => {
@@ -63,7 +68,7 @@ const App = {
     });
 
     // Config table rows — delegation for edit/delete/save/cancel
-    ['equipos', 'bloques', 'salas', 'usuarios'].forEach(tab => {
+    ['equipos', 'bloques', 'salas', 'periodos', 'usuarios'].forEach(tab => {
       document.getElementById('config-' + tab + '-list')?.addEventListener('click', e => {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
@@ -191,8 +196,8 @@ const App = {
   _setupConfigTabs() {
     const rol = this.userRole;
     console.log('_setupConfigTabs rol:', rol, 'currentUser.Rol:', this.currentUser?.Rol);
-    const allTabs = ['equipos', 'bloques', 'salas', 'usuarios'];
-    const visibleTabs = rol === 'admin' ? allTabs : (rol === 'user' ? ['equipos'] : []);
+    const allTabs = ['equipos', 'bloques', 'salas', 'periodos', 'usuarios'];
+    const visibleTabs = rol === 'admin' ? allTabs : (rol === 'user' ? ['equipos', 'periodos'] : []);
 
     allTabs.forEach(tab => {
       const li = document.getElementById('config-tab-li-' + tab);
@@ -228,6 +233,7 @@ const App = {
     document.getElementById('res-slots-info').innerHTML = infoHtml;
     document.getElementById('res-user-info').textContent = this.currentUser.Nombre + ' (' + this.currentUser.Email + ')';
     document.getElementById('res-actividad').value = '';
+    document.getElementById('res-descripcion').value = '';
     document.getElementById('res-responsable').value = this.currentUser.Nombre;
     document.getElementById('res-comentarios').value = '';
     this.populateEquipmentCheckboxes();
@@ -235,6 +241,7 @@ const App = {
     // Recurrence
     document.getElementById('res-recurrence-check').checked = false;
     document.getElementById('res-recurrence-options').classList.add('d-none');
+    this._populatePeriodCheckboxes();
     const earliest = selections.map(s => s.fecha).sort()[0];
     document.getElementById('res-recurrence-from').value = earliest;
     const until = new Date(earliest + 'T12:00:00');
@@ -247,6 +254,33 @@ const App = {
   toggleResRecurrence() {
     const checked = document.getElementById('res-recurrence-check').checked;
     document.getElementById('res-recurrence-options').classList.toggle('d-none', !checked);
+  },
+
+  _populatePeriodCheckboxes() {
+    const container = document.getElementById('res-period-checks');
+    if (!container) return;
+    if (Calendar.periodos.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = Calendar.periodos.map(p =>
+      `<div class="form-check">
+        <input class="form-check-input res-period-cb" type="checkbox" value="${p.ID}" id="res-period-${p.ID}" data-fin="${escapeHtml(p.FechaFin)}">
+        <label class="form-check-label" for="res-period-${p.ID}">${escapeHtml(p.Nombre)}</label>
+      </div>`
+    ).join('');
+    container.addEventListener('change', e => {
+      const cb = e.target.closest('.res-period-cb');
+      if (!cb) return;
+      if (cb.checked) {
+        // Uncheck other period checkboxes
+        container.querySelectorAll('.res-period-cb').forEach(other => {
+          if (other !== cb) other.checked = false;
+        });
+        // Auto-check recurrence and apply dates
+        document.getElementById('res-recurrence-check').checked = true;
+        document.getElementById('res-recurrence-options').classList.remove('d-none');
+        document.getElementById('res-recurrence-from').value = Calendar.formatDate(new Date());
+        document.getElementById('res-recurrence-until').value = cb.dataset.fin;
+      }
+    });
   },
 
   async confirmReservation() {
@@ -346,6 +380,7 @@ const App = {
 
     btn.textContent = 'Reservando...';
 
+    const descripcion = document.getElementById('res-descripcion').value.trim();
     const comentarios = document.getElementById('res-comentarios').value.trim();
     const equipos = [];
     document.querySelectorAll('#res-equipos-container input[type="checkbox"]:checked').forEach(cb => {
@@ -357,6 +392,7 @@ const App = {
         slots: allSlots,
         actividad,
         recurrenciaGrupo,
+        descripcion,
         comentarios,
         equipos,
         responsable
@@ -542,6 +578,7 @@ const App = {
 
     document.getElementById('edit-res-info').innerHTML = infoHtml;
     document.getElementById('edit-res-actividad').value = reserva.Actividad || '';
+    document.getElementById('edit-res-descripcion').value = reserva.Descripcion || '';
     document.getElementById('edit-res-responsable').value = reserva.Responsable || reserva.Nombre || '';
     document.getElementById('edit-res-comentarios').value = reserva.Comentarios || '';
     this.populateEditEquipmentCheckboxes(reserva.Equipos);
@@ -601,6 +638,7 @@ const App = {
         reservaId: this._editReserva.ID,
         fecha: this._editReserva.Fecha,
         actividad,
+        descripcion: document.getElementById('edit-res-descripcion').value.trim(),
         responsable,
         comentarios: document.getElementById('edit-res-comentarios').value.trim(),
         equipos
@@ -696,18 +734,35 @@ const App = {
   renderDailySummary(dateStr) {
     const container = document.getElementById('daily-summary-content');
     const reservas = Calendar.allReservations.filter(r => r.Fecha === dateStr);
+    const fullView = this._summaryFullView;
 
     if (reservas.length === 0) {
       container.innerHTML = '<div class="summary-empty">No hay reservas para esta fecha.</div>';
       return;
     }
 
+    // Helper: resolve equipment names for a reservation
+    const getEqNames = r => r.Equipos ? parseEquipos(r.Equipos).map(id => {
+      const eq = Calendar.equipos.find(e => String(e.ID) === id);
+      return eq ? eq.Nombre : '';
+    }).filter(Boolean).join(', ') : '';
+
     const h = ['<div class="sala-grid summary-grid">'];
 
     Calendar.salas.forEach(sala => {
-      const salaReservas = reservas
+      let salaReservas = reservas
         .filter(r => r.SalaID === sala.ID)
         .sort((a, b) => a.BloqueID - b.BloqueID);
+
+      if (!fullView) {
+        // Simplified view: reservations with comments or equipment
+        salaReservas = salaReservas.filter(r => {
+          const hasComments = r.Comentarios && r.Comentarios.trim().length > 0;
+          const hasEquipos = r.Equipos && parseEquipos(r.Equipos).length > 0;
+          return hasComments || hasEquipos;
+        });
+        if (salaReservas.length === 0) return;
+      }
 
       h.push('<div class="sala-panel">');
       h.push(`<div class="sala-panel-header"><span class="sala-panel-name">${sala.Nombre}</span><span class="sala-panel-cap">Cap. ${sala.Capacidad}</span></div>`);
@@ -716,23 +771,33 @@ const App = {
         h.push('<div class="p-3 text-center text-muted" style="font-size:0.8125rem">Sin reservas</div>');
       } else {
         h.push('<table class="summary-table">');
-        h.push('<thead><tr><th>Bloque</th><th>Actividad</th><th>Responsable</th><th>Comentarios</th><th>Equipos</th></tr></thead>');
+        if (fullView) {
+          h.push('<thead><tr><th>Bloque</th><th>Actividad</th><th>Descripción</th><th>Responsable</th><th>Comentarios</th><th>Equipos</th></tr></thead>');
+        } else {
+          h.push('<thead><tr><th>Bloque</th><th>Comentarios</th><th>Equipos</th></tr></thead>');
+        }
         h.push('<tbody>');
 
         salaReservas.forEach(r => {
           const bloque = Calendar.bloques.find(b => b.ID === r.BloqueID);
-          const eqNames = r.Equipos ? parseEquipos(r.Equipos).map(id => {
-            const eq = Calendar.equipos.find(e => String(e.ID) === id);
-            return eq ? eq.Nombre : '';
-          }).filter(Boolean).join(', ') : '';
+          const eqNames = getEqNames(r);
 
-          h.push(`<tr>
-            <td><strong>${escapeHtml(bloque ? bloque.Etiqueta : '')}</strong></td>
-            <td>${escapeHtml(r.Actividad || '')}</td>
-            <td>${escapeHtml(r.Responsable || r.Nombre)}</td>
-            <td>${escapeHtml(r.Comentarios || '')}</td>
-            <td>${escapeHtml(eqNames)}</td>
-          </tr>`);
+          if (fullView) {
+            h.push(`<tr>
+              <td><strong>${escapeHtml(bloque ? bloque.Etiqueta : '')}</strong></td>
+              <td>${escapeHtml(r.Actividad || '')}</td>
+              <td>${escapeHtml(r.Descripcion || '')}</td>
+              <td>${escapeHtml(r.Responsable || r.Nombre)}</td>
+              <td>${escapeHtml(r.Comentarios || '')}</td>
+              <td>${escapeHtml(eqNames)}</td>
+            </tr>`);
+          } else {
+            h.push(`<tr>
+              <td><strong>${escapeHtml(bloque ? bloque.Etiqueta : '')}</strong></td>
+              <td>${escapeHtml(r.Comentarios || '')}</td>
+              <td>${escapeHtml(eqNames)}</td>
+            </tr>`);
+          }
         });
 
         h.push('</tbody></table>');
@@ -785,6 +850,7 @@ const App = {
 
   // ── Configuración ────────────────────────────────────
 
+  _summaryFullView: false,
   _configTab: 'equipos',
 
   showConfigTab(tab, event) {
@@ -816,6 +882,8 @@ const App = {
       return `<tr data-id="${item.ID}"><td>${item.ID}</td><td>${esc(item.HoraInicio)}</td><td>${esc(item.HoraFin)}</td><td>${esc(item.Etiqueta || '')}</td>${btns}</tr>`;
     } else if (tab === 'salas') {
       return `<tr data-id="${item.ID}"><td>${item.ID}</td><td>${esc(item.Nombre)}</td><td>${item.Capacidad}</td>${btns}</tr>`;
+    } else if (tab === 'periodos') {
+      return `<tr data-id="${item.ID}"><td>${item.ID}</td><td>${esc(item.Nombre)}</td><td>${esc(item.FechaInicio)}</td><td>${esc(item.FechaFin)}</td>${btns}</tr>`;
     }
   },
 
@@ -862,6 +930,13 @@ const App = {
         <td><input type="text" class="form-control form-control-sm" data-field="Nombre" value="${esc(item?.Nombre || '')}"></td>
         <td><input type="number" class="form-control form-control-sm" data-field="Capacidad" value="${item?.Capacidad ?? 0}" min="0"></td>
         ${btns}</tr>`;
+    } else if (tab === 'periodos') {
+      return `<tr class="cfg-editing" data-id="${id}">
+        <td>${id || '<small class="text-muted">Nuevo</small>'}</td>
+        <td><input type="text" class="form-control form-control-sm" data-field="Nombre" value="${esc(item?.Nombre || '')}" placeholder="Ej: 2026-1"></td>
+        <td><input type="date" class="form-control form-control-sm" data-field="FechaInicio" value="${esc(item?.FechaInicio || '')}"></td>
+        <td><input type="date" class="form-control form-control-sm" data-field="FechaFin" value="${esc(item?.FechaFin || '')}"></td>
+        ${btns}</tr>`;
     }
   },
 
@@ -878,6 +953,8 @@ const App = {
       items = Calendar.bloques;
     } else if (tab === 'salas' && Calendar.salas?.length) {
       items = Calendar.salas;
+    } else if (tab === 'periodos' && Calendar.periodos?.length) {
+      items = Calendar.periodos;
     } else {
       const res = await Api.configManager(tab, 'list');
       if (!res.ok) { this.showToast(res.error || 'Error cargando datos', 'error'); return; }
@@ -885,9 +962,9 @@ const App = {
     }
 
     const tbody = document.getElementById('config-' + tab + '-list');
-    const colSpans = { equipos: 5, bloques: 5, salas: 4, usuarios: 4 };
+    const colSpans = { equipos: 5, bloques: 5, salas: 4, periodos: 5, usuarios: 4 };
     const colSpan = colSpans[tab] || 5;
-    const emptyLabels = { equipos: 'Sin equipos', bloques: 'Sin bloques', salas: 'Sin salas', usuarios: 'Sin usuarios' };
+    const emptyLabels = { equipos: 'Sin equipos', bloques: 'Sin bloques', salas: 'Sin salas', periodos: 'Sin periodos', usuarios: 'Sin usuarios' };
 
     tbody.innerHTML = items.map(item => this._renderReadRow(tab, item)).join('')
       || `<tr><td colspan="${colSpan}" class="text-muted text-center">${emptyLabels[tab]}</td></tr>`;
@@ -973,6 +1050,16 @@ const App = {
         Capacidad: Number(val('Capacidad')) || 0
       };
       if (!data.Nombre) { this.showToast('Ingresa el nombre', 'warning'); return; }
+    } else if (tab === 'periodos') {
+      data = {
+        ID: rowId || null,
+        Nombre: val('Nombre'),
+        FechaInicio: val('FechaInicio'),
+        FechaFin: val('FechaFin')
+      };
+      if (!data.Nombre) { this.showToast('Ingresa el nombre del periodo', 'warning'); return; }
+      if (!data.FechaInicio || !data.FechaFin) { this.showToast('Ingresa fechas de inicio y fin', 'warning'); return; }
+      if (data.FechaInicio >= data.FechaFin) { this.showToast('Fecha inicio debe ser anterior a fecha fin', 'warning'); return; }
     }
 
     try {
@@ -1129,6 +1216,7 @@ const App = {
       Calendar.salas = initRes.data.salas;
       Calendar.bloques = initRes.data.bloques;
       Calendar.equipos = initRes.data.equipos || [];
+      Calendar.periodos = initRes.data.periodos || [];
       Calendar.buildSalaFilters();
       Calendar.render();
     }

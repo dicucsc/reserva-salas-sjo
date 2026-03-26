@@ -8,6 +8,7 @@ const Calendar = {
   salas: [],
   bloques: [],
   equipos: [],
+  periodos: [],
   allReservations: [],
   loadedYear: null,
   refreshInterval: null,
@@ -58,6 +59,7 @@ const Calendar = {
       this.salas = initRes.data.salas;
       this.bloques = initRes.data.bloques;
       this.equipos = initRes.data.equipos || [];
+      this.periodos = initRes.data.periodos || [];
     }
 
     if (compactRes.ok) {
@@ -219,7 +221,7 @@ const Calendar = {
   // ── Compact data expansion ─────────────────────────────
 
   expandCompact(c) {
-    return c.r.map(([id, s, doy, b, ui, ai, gi, ci, eq, pi]) => ({
+    return c.r.map(([id, s, doy, b, ui, ai, gi, ci, eq, pi, di]) => ({
       ID: id,
       SalaID: s,
       Fecha: this.doyToDate(c.y, doy),
@@ -230,7 +232,8 @@ const Calendar = {
       Recurrencia: gi < 0 ? '' : c.g[gi],
       Comentarios: ci < 0 ? '' : (c.c ? c.c[ci] : ''),
       Equipos: eq || '',
-      Responsable: (c.p && pi != null) ? c.p[pi] : c.u[ui][1]
+      Responsable: (c.p && pi != null) ? c.p[pi] : c.u[ui][1],
+      Descripcion: (di != null && di >= 0 && c.d) ? c.d[di] : ''
     }));
   },
 
@@ -276,21 +279,36 @@ const Calendar = {
     this._resMap = new Map();
   },
 
-  async reloadData(force) {
+  async reloadData(force, extraYears) {
     const now = Date.now();
-    if (!force && now - this._lastReloadTs < 5000) return;
+    if (!force && now - this._lastReloadTs < 5000) return true;
     try {
-      const year = this.currentDate.getFullYear();
-      const res = await Api.getYearCompact(year);
-      if (res.ok) {
-        this.allReservations = this.expandCompact(res.data);
-        this.loadedYear = year;
-        this.buildResMap();
+      const primaryYear = this.currentDate.getFullYear();
+      const yearsToLoad = new Set([primaryYear]);
+      if (extraYears) extraYears.forEach(y => yearsToLoad.add(y));
+
+      const results = await Promise.all(
+        [...yearsToLoad].map(y => Api.getYearCompact(y))
+      );
+
+      const allFailed = results.every(r => !r.ok);
+      if (allFailed) return false;
+
+      let combined = [];
+      const years = [...yearsToLoad];
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].ok) {
+          combined = combined.concat(this.expandCompact(results[i].data));
+        }
       }
+      this.allReservations = combined;
+      this.loadedYear = primaryYear;
+      this.buildResMap();
       this._lastReloadTs = Date.now();
+      return true;
     } catch (e) {
       console.error('reloadData error:', e);
-      App.showToast('Error al refrescar datos', 'warning');
+      return false;
     }
   },
 

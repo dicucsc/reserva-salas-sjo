@@ -17,7 +17,7 @@ module.exports = async function (context, req) {
     }
     const email = user.email;
 
-    const { slots, actividad, recurrenciaGrupo, comentarios, equipos, responsable } = req.body;
+    const { slots, actividad, recurrenciaGrupo, comentarios, equipos, responsable, descripcion } = req.body;
 
     if (!slots || !slots.length) {
       context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Faltan campos obligatorios' }) };
@@ -111,6 +111,7 @@ module.exports = async function (context, req) {
     const responsableStr = responsable || nombreReal;
     const now = new Date().toISOString();
     const comentarioStr = comentarios || '';
+    const descripcionStr = descripcion || '';
     const equiposStr = equiposArr.join(',');
     const createdIds = [];
 
@@ -130,6 +131,7 @@ module.exports = async function (context, req) {
         Email: email,
         Nombre: nombreReal,
         Actividad: actividad || '',
+        Descripcion: descripcionStr,
         Recurrencia: recurrenciaGrupo || '',
         CreatedAt: now,
         Comentarios: comentarioStr,

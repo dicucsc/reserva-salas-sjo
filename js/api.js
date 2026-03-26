@@ -70,6 +70,8 @@ const Api = {
   cancelReservation: (id, fecha) => Api._post('cancelReservation', { reservaId: id, fecha }),
   cancelRecurrenceGroup: (g) => Api._post('cancelRecurrenceGroup', { recurrenciaGrupo: g }),
   updateReservation: (data) => Api._post('updateReservation', data),
-  configManager: (resource, action, data) => Api._post('configManager', { resource, action, data: data || {} })
+  configManager: (resource, action, data) => Api._post('configManager', { resource, action, data: data || {} }),
+  backupReservations: () => Api._get('backupReservations'),
+  migrateDescripcion: (dryRun) => Api._post('migrateDescripcion', { dryRun })
 
 };

@@ -16,7 +16,7 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const { reservaId, fecha, actividad, comentarios, equipos, responsable } = req.body;
+    const { reservaId, fecha, actividad, comentarios, equipos, responsable, descripcion } = req.body;
 
     if (!reservaId) {
       context.res = { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: false, error: 'Falta reservaId' }) };
@@ -42,6 +42,7 @@ module.exports = async function (context, req) {
     }
 
     if (actividad !== undefined) reserva.Actividad = actividad || '';
+    if (descripcion !== undefined) reserva.Descripcion = descripcion || '';
     if (comentarios !== undefined) reserva.Comentarios = comentarios || '';
     if (responsable !== undefined) reserva.Responsable = responsable || '';
 

@@ -35,11 +35,13 @@ async function buildYearCompact(year) {
   const actMap = new Map();
   const groupMap = new Map();
   const commentMap = new Map();
+  const descMap = new Map();
   const respMap = new Map();
   const users = [];
   const activities = [];
   const groups = [];
   const comments = [];
+  const descripciones = [];
   const responsables = [];
 
   yearReservations.forEach(r => {
@@ -68,6 +70,12 @@ async function buildYearCompact(year) {
       comments.push(comment);
     }
 
+    const desc = r.Descripcion || '';
+    if (desc && !descMap.has(desc)) {
+      descMap.set(desc, descripciones.length);
+      descripciones.push(desc);
+    }
+
     const resp = r.Responsable || r.Nombre || '';
     if (!respMap.has(resp)) {
       respMap.set(resp, responsables.length);
@@ -85,6 +93,7 @@ async function buildYearCompact(year) {
     const act = r.Actividad || '';
     const rec = r.Recurrencia || '';
     const comment = r.Comentarios || '';
+    const desc = r.Descripcion || '';
     const equip = r.Equipos || '';
     const resp = r.Responsable || r.Nombre || '';
 
@@ -98,7 +107,8 @@ async function buildYearCompact(year) {
       rec ? groupMap.get(rec) : -1,
       comment ? commentMap.get(comment) : -1,
       equip,
-      respMap.get(resp)
+      respMap.get(resp),
+      desc ? descMap.get(desc) : -1
     ];
   });
 
@@ -108,6 +118,7 @@ async function buildYearCompact(year) {
     a: activities,
     g: groups,
     c: comments,
+    d: descripciones,
     p: responsables,
     r: records
   };
